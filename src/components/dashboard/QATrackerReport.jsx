@@ -91,7 +91,7 @@ const QATrackerReport = () => {
     tracker_datetime: "",
     project_id: "",
     task_id: "",
-    shift_type: "",
+    shift_type: "day",
     production: "",
     base_target: "",
     tracker_note: "",
@@ -208,11 +208,13 @@ const QATrackerReport = () => {
       setEditProjects(projectsWithTasks);
       setAddProjects(projectsWithTasks); // Also set for add modal
       log('[QATrackerReport] Projects with tasks fetched:', projectsWithTasks.length);
+      return projectsWithTasks; // Return the data for immediate use
     } catch (error) {
       logError('[QATrackerReport] Error fetching projects with tasks:', error);
       setEditProjects([]);
       setAddProjects([]);
       toast.error("Failed to load projects");
+      return []; // Return empty array on error
     }
   };
 
@@ -448,7 +450,7 @@ const QATrackerReport = () => {
         tracker_datetime: "",
         project_id: "",
         task_id: "",
-        shift_type: "",
+        shift_type: "day",
         production: "",
         base_target: "",
         tracker_note: "",
@@ -558,7 +560,7 @@ const QATrackerReport = () => {
         else delete newErrors.task_id;
         break;
       case 'shift_type':
-        if (!value) newErrors.shift_type = 'Shift type is required';
+        if (!value) newErrors.shift_type = 'Shift is required';
         else delete newErrors.shift_type;
         break;
       case 'production':
@@ -621,7 +623,7 @@ const QATrackerReport = () => {
     }
     if (!addFormData.project_id) errors.project_id = 'Project is required';
     if (!addFormData.task_id) errors.task_id = 'Task is required';
-    if (!addFormData.shift_type) errors.shift_type = 'Shift type is required';
+    if (!addFormData.shift_type) errors.shift_type = 'Shift is required';
     if (!addFormData.production) errors.production = 'Production is required';
     else if (isNaN(addFormData.production) || Number(addFormData.production) <= 0) {
       errors.production = 'Enter valid production';
@@ -711,47 +713,51 @@ const QATrackerReport = () => {
 
     try {
       // Fetch projects with tasks if not already fetched
+      let projectsData = editProjects;
       if (editProjects.length === 0) {
-        await fetchProjectsWithTasks();
+        projectsData = await fetchProjectsWithTasks();
       }
 
-      // Fetch existing tracker data from tracker/view API
-      const payload = {
-        logged_in_user_id: user?.user_id,
-        device_id: device_id,
-        device_type: device_type,
-        tracker_id: tracker.tracker_id
-      };
-
-      const res = await api.post("/tracker/view", payload);
-      const data = res.data?.data || {};
-      const trackerData = Array.isArray(data.trackers) && data.trackers.length > 0 
-        ? data.trackers[0] 
-        : tracker;
-
-      // Set form data with existing values
+      // Use the tracker data passed from the table (already has all the info we need)
+      // Normalize shift value to match dropdown options ('day' or 'night')
+      const rawShift = tracker.shift_type || tracker.shift || "";
+      log('[QATrackerReport] Raw shift value:', rawShift);
+      
+      const normalizedShift = String(rawShift).toLowerCase().includes('day') ? 'day' 
+                            : String(rawShift).toLowerCase().includes('night') ? 'night' 
+                            : String(rawShift).toLowerCase();
+      
+      log('[QATrackerReport] Normalized shift value:', normalizedShift);
+      
+      // Set form data with existing values from tracker
       setEditFormData({
-        project_id: trackerData.project_id || "",
-        task_id: trackerData.task_id || "",
-        shift_type: trackerData.shift_type || "",
-        production: trackerData.production || "",
-        base_target: trackerData.tenure_target || trackerData.actual_target || "",
-        tracker_note: trackerData.tracker_note || trackerData.notes || "",
+        project_id: tracker.project_id || "",
+        task_id: tracker.task_id || "",
+        shift_type: normalizedShift,
+        production: tracker.production || "",
+        base_target: tracker.tenure_target || tracker.actual_target || "",
+        tracker_note: tracker.tracker_note || tracker.notes || "",
         tracker_file: null,
       });
 
       // Set file preview if tracker has file
-      if (trackerData.tracker_file) {
-        setEditFilePreview(trackerData.tracker_file);
+      if (tracker.tracker_file) {
+        setEditFilePreview(tracker.tracker_file);
       }
 
-      // Update tasks based on selected project
-      if (trackerData.project_id && editProjects.length > 0) {
-        const project = editProjects.find(p => String(p.project_id) === String(trackerData.project_id));
+      // Update tasks based on selected project using the fetched projects data
+      if (tracker.project_id && projectsData.length > 0) {
+        const project = projectsData.find(p => String(p.project_id) === String(tracker.project_id));
+        log('[QATrackerReport] Found project for tasks:', project?.project_name, 'Tasks count:', project?.tasks?.length);
         setEditTasks(project?.tasks || []);
       }
 
-      log('[QATrackerReport] Edit form data loaded:', editFormData);
+      log('[QATrackerReport] Edit form data set:', {
+        project_id: tracker.project_id,
+        task_id: tracker.task_id,
+        shift_type: normalizedShift,
+        production: tracker.production
+      });
     } catch (error) {
       logError('[QATrackerReport] Error loading tracker data:', error);
       toast.error("Failed to load tracker data");
@@ -1644,26 +1650,25 @@ const QATrackerReport = () => {
                         </div>
                       </div>
 
-                      {/* Shift Type Selection */}
+                      {/* Shift Selection */}
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wide">
                           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
                             <circle cx="12" cy="12" r="10"></circle>
                             <polyline points="12 6 12 12 16 14"></polyline>
                           </svg>
-                          Shift Type
+                          Shift
                           <span className="text-red-500">*</span>
                         </label>
                         <SearchableSelect
                           value={editFormData.shift_type}
                           onChange={(value) => handleEditFieldChange('shift_type', value)}
                           options={[
-                            { value: '', label: 'Select shift type...' },
-                            { value: 'day', label: 'Day Shift' },
-                            { value: 'night', label: 'Night Shift' }
+                            { value: 'day', label: 'Day' },
+                            { value: 'night', label: 'Night' }
                           ]}
                           icon={Clock}
-                          placeholder="Select shift type..."
+                          placeholder="Select shift..."
                           disabled={false}
                         />
                       </div>
@@ -2158,23 +2163,22 @@ const QATrackerReport = () => {
                           )}
                         </div>
 
-                        {/* Shift Type Selection */}
-                        <div className="space-y-2">
-                          <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wide">
-                            <Clock className="w-4 h-4 text-blue-600" />
-                            Shift Type
-                            <span className="text-red-500">*</span>
-                          </label>
-                          <SearchableSelect
-                            value={addFormData.shift_type}
-                            onChange={(value) => handleAddFieldChange('shift_type', value)}
-                            options={[
-                              { value: '', label: 'Select shift type...' },
-                              { value: 'day', label: 'Day Shift' },
-                              { value: 'night', label: 'Night Shift' }
-                            ]}
-                            icon={Clock}
-                            placeholder="Select shift type..."
+{/* Shift Selection */}
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wide">
+            <Clock className="w-4 h-4 text-blue-600" />
+            Shift
+            <span className="text-red-500">*</span>
+          </label>
+          <SearchableSelect
+            value={addFormData.shift_type}
+            onChange={(value) => handleAddFieldChange('shift_type', value)}
+            options={[
+              { value: 'day', label: 'Day' },
+              { value: 'night', label: 'Night' }
+            ]}
+            icon={Clock}
+            placeholder="Select shift..."
                             error={addTouched.shift_type && addErrors.shift_type}
                           />
                           {addTouched.shift_type && addErrors.shift_type && (

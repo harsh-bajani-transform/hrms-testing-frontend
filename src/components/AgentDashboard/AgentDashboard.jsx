@@ -30,7 +30,7 @@ const AgentDashboard = ({ embedded = false }) => {
   const [viewAll, setViewAll] = useState(false);
   const [selectedProject, setSelectedProject] = useState("");
   const [selectedTask, setSelectedTask] = useState("");
-  const [shiftType, setShiftType] = useState("");
+  const [shiftType, setShiftType] = useState("day");
   const [baseTarget, setBaseTarget] = useState("");
   const [baseTargetLoading, setBaseTargetLoading] = useState(false);
   const [productionTarget, setProductionTarget] = useState("");
@@ -180,7 +180,7 @@ const AgentDashboard = ({ embedded = false }) => {
     const newErrors = {};
     if (!selectedProject) newErrors.selectedProject = "Project is required.";
     if (!selectedTask) newErrors.selectedTask = "Task is required.";
-    if (!shiftType) newErrors.shiftType = "Shift Type is required.";
+    if (!shiftType) newErrors.shiftType = "Shift is required.";
     if (!baseTarget) newErrors.baseTarget = "Base Target is required.";
     if (!productionTarget) newErrors.productionTarget = "Production Target is required.";
     else if (isNaN(Number(productionTarget)) || Number(productionTarget) < 0) newErrors.productionTarget = "Enter a valid number.";
@@ -453,7 +453,7 @@ const AgentDashboard = ({ embedded = false }) => {
                   )}
                 </div>
 
-                {/* Shift Type Selection */}
+                {/* Shift Selection */}
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wide">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
@@ -470,12 +470,11 @@ const AgentDashboard = ({ embedded = false }) => {
                       handleBlur('shiftType');
                     }}
                     options={[
-                      { value: '', label: 'Select shift type...' },
                       { value: 'day', label: 'Day' },
                       { value: 'night', label: 'Night' }
                     ]}
                     icon={Clock}
-                    placeholder="Select shift type..."
+                    placeholder="Select shift..."
                     disabled={false}
                   />
                   {touched.shiftType && errors.shiftType && (
