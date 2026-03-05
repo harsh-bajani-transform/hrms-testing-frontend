@@ -5,6 +5,7 @@
  */
 
 import api from "./api";
+import nodeApi from "./nodeApi";
 import { log, logError } from "../config/environment";
 
 /**
@@ -29,6 +30,66 @@ export const saveTempQC = async (payload) => {
       data: error.response?.data,
       message: error.message
     });
+    throw error;
+  }
+};
+
+/**
+ * Fetch AFD (Attribute/Feature/Defect) data for a project category
+ * @param {number} project_category_id - Project category ID
+ * @returns {Promise} AFD data with categories and subcategories
+ */
+export const fetchProjectCategoryAFD = async (project_category_id) => {
+  try {
+    log(`[QC Service] Fetching AFD for project category ${project_category_id}`);
+    
+    const response = await api.post("/project_category/list", { project_category_id });
+    
+    log(`[QC Service] AFD data fetched successfully:`, response.data);
+    return response.data;
+  } catch (error) {
+    logError("[QC Service] Error fetching project category AFD:", error);
+    throw error;
+  }
+};
+
+/**
+ * Fetch QC AFD (Attribute/Feature/Defect) list from Node API
+ * @returns {Promise} AFD data with categories and subcategories
+ */
+export const fetchQCAFDList = async () => {
+  try {
+    log(`[QC Service] Fetching QC AFD list from Node API`);
+    
+    const response = await nodeApi.get("/qc-afd/list");
+    
+    log(`[QC Service] QC AFD data fetched successfully:`, response.data);
+    return response.data;
+  } catch (error) {
+    logError("[QC Service] Error fetching QC AFD list:", error);
+    throw error;
+  }
+};
+
+/**
+ * Generate 10% sample data from tracker file
+ * @param {number} tracker_id - Tracker ID
+ * @param {number} logged_in_user_id - Logged in user ID
+ * @returns {Promise} Sample data response with file URL and records
+ */
+export const generateQCSample = async (tracker_id, logged_in_user_id) => {
+  try {
+    log(`[QC Service] Generating sample for tracker ${tracker_id}`);
+    
+    const response = await nodeApi.post("/qc-records/generate-sample", {
+      tracker_id,
+      logged_in_user_id
+    });
+    
+    log(`[QC Service] Sample generated successfully:`, response.data);
+    return response.data;
+  } catch (error) {
+    logError("[QC Service] Error generating QC sample:", error);
     throw error;
   }
 };

@@ -91,10 +91,12 @@ const MultiSelectWithCheckbox = ({
     setSearchTerm('');
   };
 
-  // Display text
+  // Display text - truncate to first 7 characters
   const getDisplayText = () => {
     if (selectedOptions.length === 0) return placeholder;
-    return selectedOptions.map(opt => opt.label).join(', ');
+    const fullText = selectedOptions.map(opt => opt.label).join(', ');
+    if (fullText.length <= 7) return fullText;
+    return fullText.substring(0, 7) + '...';
   };
 
   return (
@@ -122,7 +124,7 @@ const MultiSelectWithCheckbox = ({
         `}
       >
         {Icon && <Icon className="w-4 h-4 text-blue-600 mr-2.5 shrink-0" />}
-        <span className={`text-sm font-medium flex-1 text-left truncate ${
+        <span className={`text-sm font-medium flex-1 text-left ${
           selectedOptions.length > 0 ? 'text-slate-800' : 'text-slate-400'
         }`}>
           {getDisplayText()}

@@ -3,9 +3,10 @@
  * Author: Naitik Maisuriya
  * Description: QC Form page for quality checking with dynamic form fields
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
 import {
   ArrowLeft,
   Download,
@@ -13,18 +14,39 @@ import {
   FileText,
   User,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Calendar,
+  Briefcase,
+  FolderOpen,
+  Target,
+  ListChecks,
+  XCircle,
+  Award,
+  ClipboardCheck,
+  Send
 } from 'lucide-react';
 import api from '../services/api';
+import { generateQCSample } from '../services/qcService';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorMessage from '../components/common/ErrorMessage';
 import MultiSelectWithCheckbox from '../components/common/MultiSelectWithCheckbox';
 import SearchableSelect from '../components/common/SearchableSelect';
+import QCConfirmationModal from '../components/common/QCConfirmationModal';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '../components/ui/pagination';
 
 const QCFormPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const trackerData = location.state?.tracker;
+  const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -38,10 +60,77 @@ const QCFormPage = () => {
   const [formRows, setFormRows] = useState([]);
   const [qcScore, setQcScore] = useState(0);
   
-  // State for error selection
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedSubcategories, setSelectedSubcategories] = useState([]);
-  const [selectedRecord, setSelectedRecord] = useState(null);
+  // State for error selection - now stored per row ID to persist across pagination
+  const [pendingSelections, setPendingSelections] = useState({}); // { rowId: { category, subcategories } }
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  
+  // Lazy loading state
+  const [displayedRows, setDisplayedRows] = useState(100); // Initial rows to display
+  
+  // Modal state
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [submissionType, setSubmissionType] = useState(''); // 'regular', 'rework', 'correction'
+
+  // Calculate error metrics
+  const errorMetrics = useMemo(() => {
+    const recordCount = formRows.length;
+    const tenPercentCount = Math.ceil(recordCount * 0.1);
+    
+    // Count total errors marked
+    const totalErrors = formRows.reduce((sum, row) => sum + row.errors.length, 0);
+    
+    // Get unique error list with counts
+    const errorMap = new Map();
+    formRows.forEach(row => {
+      row.errors.forEach(error => {
+        const category = afdData?.categories.find(cat => cat.qc_afd_id === error.categoryId);
+        const subcategory = category?.subcategories.find(sub => sub.qc_afd_id === error.subcategoryId);
+        
+        if (category && subcategory) {
+          const key = `${category.name} - ${subcategory.name}`;
+          errorMap.set(key, (errorMap.get(key) || 0) + 1);
+        }
+      });
+    });
+    
+    const errorList = Array.from(errorMap.entries()).map(([name, count]) => ({
+      name,
+      count
+    }));
+    
+    // Determine status based on score
+    let status = 'Regular';
+    if (qcScore < 80) {
+      status = 'Correction';
+    } else if (qcScore < 95) {
+      status = 'Rework';
+    }
+    
+    return {
+      recordCount,
+      tenPercentCount,
+      totalErrors,
+      errorList,
+      status
+    };
+  }, [formRows, afdData, qcScore]);
+
+  // Lazy loading - calculate visible rows and pagination
+  const visibleFormRows = formRows.slice(0, displayedRows);
+  const totalPages = Math.ceil(visibleFormRows.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentPageData = visibleFormRows.slice(startIndex, endIndex);
+
+  // Load more rows when user reaches near the end
+  useEffect(() => {
+    if (displayedRows < formRows.length && currentPage >= totalPages - 2) {
+      setDisplayedRows(prev => Math.min(prev + 100, formRows.length));
+    }
+  }, [currentPage, totalPages, displayedRows, formRows.length]);
 
   // Fetch QC Form data
   useEffect(() => {
@@ -60,7 +149,7 @@ const QCFormPage = () => {
 
       let transformedAFD = null;
 
-      // Fetch AFD data from API
+      // Fetch AFD data from Python API
       const afdResponse = await api.post('/qc_afd/list', {});
       
       if (afdResponse.data.status === 200 && afdResponse.data.data.length > 0) {
@@ -86,23 +175,33 @@ const QCFormPage = () => {
         setAfdData(transformedAFD);
       }
 
-      // TODO: Fetch actual form data from tracker
-      // const formResponse = await api.get(`/tracker/data/${trackerData.tracker_id}`);
+      // Fetch 10% sample data from tracker using Node API
+      let sampleData = [];
       
-      // MOCK DATA: Simulating file records
-      const mockFormData = [
-        { id: 1, field1: 'John Doe', field2: 'Active', field3: '2024-01-15' },
-        { id: 2, field1: 'Jane Smith', field2: 'Completed', field3: '2024-01-16' },
-        { id: 3, field1: 'Bob Wilson', field2: 'Pending', field3: '2024-01-17' },
-        { id: 4, field1: 'Alice Johnson', field2: 'Active', field3: '2024-01-18' },
-        { id: 5, field1: 'Charlie Brown', field2: 'Completed', field3: '2024-01-19' }
-      ];
+      if (trackerData.tracker_id && user?.user_id) {
+        try {
+          const sampleResponse = await generateQCSample(
+            trackerData.tracker_id,
+            user.user_id
+          );
+          
+          if (sampleResponse.success && sampleResponse.data) {
+            sampleData = sampleResponse.data.records || [];
+            console.log('[QCFormPage] Sample data generated:', sampleData);
+          } else {
+            console.warn('[QCFormPage] No sample data returned');
+          }
+        } catch (sampleError) {
+          console.error('[QCFormPage] Error generating sample:', sampleError);
+          toast.error('Failed to generate sample data');
+        }
+      }
 
-      setFormData(mockFormData);
+      setFormData(sampleData);
 
       // Initialize form rows with errors structure
-      const initialRows = mockFormData.map((data) => ({
-        id: data.id,
+      const initialRows = sampleData.map((data, index) => ({
+        id: data.id || index + 1, // Use data.id if available, otherwise use index + 1
         originalData: data,
         errors: [] // Array of { categoryId, subcategoryId }
       }));
@@ -135,6 +234,23 @@ const QCFormPage = () => {
     }
   };
 
+  // Update pending selection for a row
+  const updatePendingSelection = (rowId, category, subcategories) => {
+    setPendingSelections(prev => ({
+      ...prev,
+      [rowId]: { category, subcategories }
+    }));
+  };
+
+  // Clear pending selection for a row
+  const clearPendingSelection = (rowId) => {
+    setPendingSelections(prev => {
+      const updated = { ...prev };
+      delete updated[rowId];
+      return updated;
+    });
+  };
+
   // Remove error from a record
   const handleRemoveError = (rowIndex, errorIndex) => {
     const updatedRows = [...formRows];
@@ -164,6 +280,23 @@ const QCFormPage = () => {
   // Calculate score for a single record
   const calculateRecordScore = (row, afd) => {
     if (!afd || !afd.categories) return 100;
+
+    // Check if any error is a fatal error (points = 100)
+    const hasFatalError = row.errors.some(error => {
+      const category = afd.categories.find(cat => cat.qc_afd_id === error.categoryId);
+      if (category) {
+        const subcategory = category.subcategories.find(sub => sub.qc_afd_id === error.subcategoryId);
+        if (subcategory && subcategory.points >= 100) {
+          return true; // Fatal error found
+        }
+      }
+      return false;
+    });
+
+    // If fatal error exists, record score is 0
+    if (hasFatalError) {
+      return 0;
+    }
 
     // Calculate score for each category
     const categoryScores = afd.categories.map(category => {
@@ -196,6 +329,23 @@ const QCFormPage = () => {
   // Get category score for a specific record
   const getCategoryScore = (row, categoryId) => {
     if (!afdData) return 100;
+    
+    // Check if this record has any fatal error (across all categories)
+    const hasFatalError = row.errors.some(error => {
+      const cat = afdData.categories.find(c => c.qc_afd_id === error.categoryId);
+      if (cat) {
+        const subcategory = cat.subcategories.find(sub => sub.qc_afd_id === error.subcategoryId);
+        if (subcategory && subcategory.points >= 100) {
+          return true; // Fatal error found
+        }
+      }
+      return false;
+    });
+
+    // If fatal error exists, return 0 for this category too
+    if (hasFatalError) {
+      return 0;
+    }
     
     const category = afdData.categories.find(cat => cat.qc_afd_id === categoryId);
     if (!category) return 100;
@@ -231,8 +381,26 @@ const QCFormPage = () => {
     return totalDeduction;
   };
 
-  // Handle form submission
-  const handleSubmit = async () => {
+  // Handle Regular Submit (score >= 95)
+  const handleRegularSubmit = () => {
+    setSubmissionType('regular');
+    setShowConfirmModal(true);
+  };
+
+  // Handle Rework Submit (score < 95)
+  const handleReworkSubmit = () => {
+    setSubmissionType('rework');
+    setShowConfirmModal(true);
+  };
+
+  // Handle Correction
+  const handleCorrection = () => {
+    setSubmissionType('correction');
+    setShowConfirmModal(true);
+  };
+
+  // Handle actual submission from modal
+  const handleConfirmSubmission = async (comments) => {
     try {
       setSaving(true);
 
@@ -240,12 +408,24 @@ const QCFormPage = () => {
       // const response = await api.post('/qc/form/submit', {
       //   tracker_id: trackerData.tracker_id,
       //   rows: formRows,
-      //   qc_score: qcScore
+      //   qc_score: qcScore,
+      //   status: submissionType === 'regular' ? 'Regular' : submissionType === 'rework' ? 'Rework' : 'Correction',
+      //   comments: comments
       // });
+
+      console.log('Submitting with comments:', comments);
 
       // Mock success
       await new Promise(resolve => setTimeout(resolve, 1000));
-      toast.success('QC Form submitted successfully!');
+      
+      const successMessage = submissionType === 'regular' 
+        ? 'QC Form submitted successfully as Regular!' 
+        : submissionType === 'rework'
+        ? 'QC Form submitted for Rework!'
+        : 'Correction request submitted!';
+      
+      toast.success(successMessage);
+      setShowConfirmModal(false);
       navigate(-1);
 
     } catch (err) {
@@ -294,8 +474,55 @@ const QCFormPage = () => {
   // Get the first three keys from the first data object for dynamic columns
   const dynamicKeys = formData.length > 0 ? Object.keys(formData[0]).filter(key => key !== 'id').slice(0, 3) : [];
 
+  // Generate page numbers for pagination display
+  const getPageNumbers = () => {
+    const pages = [];
+    
+    if (totalPages <= 8) {
+      // Show all pages if total pages <= 8
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      // Show first 6 pages
+      for (let i = 1; i <= Math.min(6, totalPages); i++) {
+        pages.push(i);
+      }
+      
+      // Add ellipsis if needed
+      if (totalPages > 8) {
+        pages.push('ellipsis');
+      }
+      
+      // Add last 2 pages
+      for (let i = Math.max(7, totalPages - 1); i <= totalPages; i++) {
+        if (!pages.includes(i)) {
+          pages.push(i);
+        }
+      }
+    }
+    
+    return pages;
+  };
+
+  const pageNumbers = getPageNumbers();
+
+  // Handle page change
+  const handlePageChange = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  // Handle items per page change
+  const handleItemsPerPageChange = (value) => {
+    setItemsPerPage(Number(value));
+    setCurrentPage(1); // Reset to first page
+  };
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <>
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <button
@@ -311,13 +538,13 @@ const QCFormPage = () => {
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg p-6">
         <h1 className="text-xl font-bold text-white flex items-center gap-3">
           <FileText className="w-8 h-8" />
-          QC Form - {afdData?.afd_name || 'Quality Check'}
+          QC Form
         </h1>
       </div>
 
       {/* Agent Info & File Details */}
       <div className="bg-white rounded-xl shadow-md p-6 border-2 border-slate-200">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Agent Name */}
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
@@ -344,43 +571,65 @@ const QCFormPage = () => {
             </div>
           </div>
 
-          {/* Download Button */}
-          <div className="flex items-center justify-center md:justify-end">
-            <button
-              onClick={handleDownload}
-              disabled={!trackerData.tracker_file}
-              className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2"
-            >
-              <Download className="w-5 h-5" />
-              Download File
-            </button>
+          {/* Download File */}
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
+              <Download className="w-6 h-6 text-emerald-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-slate-600 font-medium">Download File</p>
+              <button
+                onClick={handleDownload}
+                disabled={!trackerData.tracker_file}
+                className="text-sm font-bold text-emerald-600 hover:text-emerald-700 disabled:text-slate-400 underline"
+              >
+                {trackerData.tracker_file ? 'Click to Download' : 'No file available'}
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Final QC Score Display */}
-      <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl shadow-md p-6 border-2 border-green-200">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-green-600 flex items-center justify-center shadow-lg">
-              <CheckCircle2 className="w-8 h-8 text-white" />
+          {/* Submission Date & Time */}
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
+              <Calendar className="w-6 h-6 text-purple-600" />
             </div>
             <div>
-              <p className="text-sm text-green-600 font-semibold uppercase tracking-wide">Final QC Score</p>
-              <p className="text-4xl font-bold text-green-800">
-                {qcScore.toFixed(2)}%
+              <p className="text-sm text-slate-600 font-medium">Submission Date & Time</p>
+              <p className="text-lg font-bold text-slate-800">
+                {trackerData.date_time 
+                  ? trackerData.date_time.replace(/:\d{2}\s*GMT.*$/, '').trim()
+                  : trackerData.tracker_date 
+                  ? trackerData.tracker_date.replace(/:\d{2}\s*GMT.*$/, '').trim()
+                  : trackerData.created_at 
+                  ? trackerData.created_at.replace(/:\d{2}\s*GMT.*$/, '').trim()
+                  : 'N/A'}
               </p>
-              <p className="text-xs text-green-600 mt-1">Average of all records</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="text-center bg-white rounded-lg p-3 shadow">
-              <p className="text-xs text-slate-600">Total Records</p>
-              <p className="text-2xl font-bold text-slate-800">{formRows.length}</p>
+
+          {/* Project Name */}
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center">
+              <FolderOpen className="w-6 h-6 text-orange-600" />
             </div>
-            <div className="text-center bg-white rounded-lg p-3 shadow">
-              <p className="text-xs text-slate-600">Categories</p>
-              <p className="text-2xl font-bold text-slate-800">{afdData?.categories.length || 0}</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-slate-600 font-medium">Project Name</p>
+              <p className="text-lg font-bold text-slate-800 truncate">
+                {trackerData.project_name || 'N/A'}
+              </p>
+            </div>
+          </div>
+
+          {/* Task Name */}
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center">
+              <Briefcase className="w-6 h-6 text-indigo-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-slate-600 font-medium">Task Name</p>
+              <p className="text-lg font-bold text-slate-800 truncate">
+                {trackerData.task_name || 'N/A'}
+              </p>
             </div>
           </div>
         </div>
@@ -423,14 +672,16 @@ const QCFormPage = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {formRows.map((row, rowIndex) => {
+              {currentPageData.map((row, rowIndex) => {
                 const recordScore = calculateRecordScore(row, afdData);
+                const actualRowIndex = formRows.findIndex(r => r.id === row.id);
+                const displayRowNum = startIndex + rowIndex + 1;
                 
                 return (
                   <tr key={row.id} className="hover:bg-blue-50 transition-colors">
                     {/* Sr. No. */}
                     <td className="px-4 py-4 text-sm font-semibold text-slate-700 border-r border-slate-200">
-                      {rowIndex + 1}
+                      {displayRowNum}
                     </td>
 
                     {/* Dynamic Columns */}
@@ -447,11 +698,9 @@ const QCFormPage = () => {
                     <td className="px-4 py-4 border-r border-slate-200">
                       <div className="flex flex-col gap-3">
                         <SearchableSelect
-                          value={selectedRecord === rowIndex ? selectedCategory : ''}
+                          value={pendingSelections[row.id]?.category || ''}
                           onChange={(value) => {
-                            setSelectedRecord(rowIndex);
-                            setSelectedCategory(value);
-                            setSelectedSubcategories([]);
+                            updatePendingSelection(row.id, value, []);
                           }}
                           options={afdData?.categories.map((cat) => ({
                             value: cat.qc_afd_id,
@@ -463,37 +712,37 @@ const QCFormPage = () => {
                         />
 
                         <MultiSelectWithCheckbox
-                          value={selectedRecord === rowIndex && selectedCategory ? selectedSubcategories : []}
+                          value={pendingSelections[row.id]?.subcategories || []}
                           onChange={(values) => {
-                            if (selectedRecord === rowIndex) {
-                              setSelectedSubcategories(values);
-                            }
+                            const currentCategory = pendingSelections[row.id]?.category || '';
+                            updatePendingSelection(row.id, currentCategory, values);
                           }}
-                          options={selectedCategory && afdData?.categories
-                            .find(cat => cat.qc_afd_id === parseInt(selectedCategory))
+                          options={pendingSelections[row.id]?.category && afdData?.categories
+                            .find(cat => cat.qc_afd_id === parseInt(pendingSelections[row.id].category))
                             ?.subcategories.map((sub) => ({
                               value: sub.qc_afd_id,
                               label: `${sub.name} (-${sub.points} pts)`
                             })) || []}
                           placeholder="Select Errors"
-                          disabled={!selectedCategory || selectedRecord !== rowIndex}
+                          disabled={!pendingSelections[row.id]?.category}
                           showSelectAll={true}
                           icon={AlertCircle}
                         />
 
                         <button
                           onClick={() => {
-                            if (selectedCategory && selectedSubcategories.length > 0 && selectedRecord === rowIndex) {
-                              selectedSubcategories.forEach(subcategoryId => {
-                                handleAddError(rowIndex, parseInt(selectedCategory), subcategoryId);
+                            const pending = pendingSelections[row.id];
+                            if (pending?.category && pending?.subcategories?.length > 0) {
+                              pending.subcategories.forEach(subcategoryId => {
+                                handleAddError(actualRowIndex, parseInt(pending.category), subcategoryId);
                               });
-                              setSelectedSubcategories([]);
+                              clearPendingSelection(row.id);
                             }
                           }}
-                          disabled={!selectedCategory || selectedSubcategories.length === 0 || selectedRecord !== rowIndex}
+                          disabled={!pendingSelections[row.id]?.category || !pendingSelections[row.id]?.subcategories?.length}
                           className="w-full px-3 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 disabled:from-slate-400 disabled:to-slate-500 text-white text-sm font-bold rounded-lg transition-all shadow-sm hover:shadow-md"
                         >
-                          Add {selectedSubcategories.length > 0 ? `(${selectedSubcategories.length})` : ''} Error{selectedSubcategories.length !== 1 ? 's' : ''}
+                          Add {pendingSelections[row.id]?.subcategories?.length > 0 ? `(${pendingSelections[row.id].subcategories.length})` : ''} Error{pendingSelections[row.id]?.subcategories?.length !== 1 ? 's' : ''}
                         </button>
                       </div>
                     </td>
@@ -515,7 +764,7 @@ const QCFormPage = () => {
                                   {subcategory?.name} (-{subcategory?.points})
                                 </span>
                                 <button
-                                  onClick={() => handleRemoveError(rowIndex, errorIndex)}
+                                  onClick={() => handleRemoveError(actualRowIndex, errorIndex)}
                                   className="text-red-600 hover:text-red-800 font-bold flex-shrink-0"
                                 >
                                   ×
@@ -573,8 +822,216 @@ const QCFormPage = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Enhanced Pagination Controls */}
+        <div className="px-6 py-5 border-t-2 border-slate-200 bg-gradient-to-r from-slate-50 to-blue-50">
+          <div className="flex items-center justify-between gap-6">
+            {/* Items Per Page Selector - LEFT */}
+            <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-lg border-2 border-blue-200 shadow-sm">
+              <span className="text-sm font-semibold text-slate-700">Show</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => handleItemsPerPageChange(e.target.value)}
+                className="px-3 py-1.5 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-md text-sm font-bold text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer hover:from-blue-100 hover:to-indigo-100 transition-all"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={500}>500</option>
+              </select>
+              <span className="text-sm font-semibold text-slate-700">entries per page</span>
+            </div>
+
+            {/* Pagination Buttons - RIGHT */}
+            {totalPages > 1 && (
+              <div>
+                <PaginationContent className="gap-2">
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      className={`h-10 px-5 py-2 rounded-lg font-semibold transition-all shadow-sm flex items-center gap-2 ${
+                        currentPage === 1
+                          ? 'pointer-events-none opacity-40 bg-slate-200 text-slate-400'
+                          : 'bg-white hover:bg-gradient-to-r hover:from-blue-600 hover:to-indigo-600 hover:text-white text-slate-700 border-2 border-slate-300 hover:border-transparent hover:shadow-md cursor-pointer'
+                      }`}
+                    />
+                  </PaginationItem>
+
+                  {pageNumbers.map((pageNum, index) => (
+                    <PaginationItem key={index}>
+                      {pageNum === 'ellipsis' ? (
+                        <PaginationEllipsis className="text-slate-500 font-bold text-lg" />
+                      ) : (
+                        <PaginationLink
+                          onClick={() => handlePageChange(pageNum)}
+                          isActive={currentPage === pageNum}
+                          className={`min-w-[40px] h-10 rounded-lg font-bold transition-all shadow-sm ${
+                            currentPage === pageNum
+                              ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md scale-110 border-2 border-blue-400'
+                              : 'bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-600 border-2 border-slate-300 hover:border-blue-400 hover:shadow-md'
+                          } cursor-pointer`}
+                        >
+                          {pageNum}
+                        </PaginationLink>
+                      )}
+                    </PaginationItem>
+                  ))}
+
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      className={`h-10 px-5 py-2 rounded-lg font-semibold transition-all shadow-sm flex items-center gap-2 ${
+                        currentPage === totalPages
+                          ? 'pointer-events-none opacity-40 bg-slate-200 text-slate-400'
+                          : 'bg-white hover:bg-gradient-to-r hover:from-blue-600 hover:to-indigo-600 hover:text-white text-slate-700 border-2 border-slate-300 hover:border-transparent hover:shadow-md cursor-pointer'
+                      }`}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
+      {/* QA Information Section */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl shadow-lg p-6 border-2 border-blue-200">
+        <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+          <ClipboardCheck className="w-6 h-6 text-blue-600" />
+          Quality Assurance Information
+        </h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* QA Name */}
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                <User className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-600 font-medium">QA Name</p>
+                <p className="text-lg font-bold text-slate-800">
+                  {user?.user_name || user?.name || 'N/A'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Final QC Score */}
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+            <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                qcScore >= 95 ? 'bg-green-100' : qcScore >= 80 ? 'bg-yellow-100' : 'bg-red-100'
+              }`}>
+                <Award className={`w-6 h-6 ${
+                  qcScore >= 95 ? 'text-green-600' : qcScore >= 80 ? 'text-yellow-600' : 'text-red-600'
+                }`} />
+              </div>
+              <div>
+                <p className="text-sm text-slate-600 font-medium">Final QC Score</p>
+                <p className={`text-2xl font-bold ${
+                  qcScore >= 95 ? 'text-green-600' : qcScore >= 80 ? 'text-yellow-600' : 'text-red-600'
+                }`}>
+                  {qcScore.toFixed(2)}%
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Status */}
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+            <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                errorMetrics.status === 'Regular' ? 'bg-green-100' : 
+                errorMetrics.status === 'Rework' ? 'bg-yellow-100' : 'bg-red-100'
+              }`}>
+                {errorMetrics.status === 'Regular' ? (
+                  <CheckCircle2 className="w-6 h-6 text-green-600" />
+                ) : errorMetrics.status === 'Rework' ? (
+                  <AlertCircle className="w-6 h-6 text-yellow-600" />
+                ) : (
+                  <XCircle className="w-6 h-6 text-red-600" />
+                )}
+              </div>
+              <div>
+                <p className="text-sm text-slate-600 font-medium">Status</p>
+                <p className={`text-lg font-bold ${
+                  errorMetrics.status === 'Regular' ? 'text-green-600' : 
+                  errorMetrics.status === 'Rework' ? 'text-yellow-600' : 'text-red-600'
+                }`}>
+                  {errorMetrics.status}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Record Count */}
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
+                <FileText className="w-6 h-6 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-600 font-medium">Record Count in File</p>
+                <p className="text-2xl font-bold text-slate-800">
+                  {errorMetrics.recordCount}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* 10% Data Count */}
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center">
+                <Target className="w-6 h-6 text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-600 font-medium">10% Data Generated</p>
+                <p className="text-2xl font-bold text-slate-800">
+                  {errorMetrics.tenPercentCount}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Error Score */}
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <XCircle className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-600 font-medium">Total Errors Marked</p>
+                <p className="text-2xl font-bold text-red-600">
+                  {errorMetrics.totalErrors}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Error List */}
+        {errorMetrics.errorList.length > 0 && (
+          <div className="mt-6 bg-white rounded-lg p-5 shadow-sm border border-blue-100">
+            <h3 className="text-md font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <ListChecks className="w-5 h-5 text-blue-600" />
+              Error Breakdown
+            </h3>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {errorMetrics.errorList.map((error, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <span className="text-sm font-medium text-slate-700">{error.name}</span>
+                  <span className="px-3 py-1 bg-red-100 text-red-700 text-sm font-bold rounded-full">
+                    {error.count} {error.count === 1 ? 'error' : 'errors'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
       {/* Action Buttons */}
       <div className="flex items-center justify-end gap-4">
         <button
@@ -583,25 +1040,87 @@ const QCFormPage = () => {
         >
           Cancel
         </button>
+        
+        {/* Correction Button - Always visible */}
         <button
-          onClick={handleSubmit}
+          onClick={handleCorrection}
           disabled={saving}
-          className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+          className="px-6 py-3 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2"
         >
           {saving ? (
             <>
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Submitting...
+              Processing...
             </>
           ) : (
             <>
-              <Save className="w-5 h-5" />
-              Submit QC Form
+              <AlertCircle className="w-5 h-5" />
+              Correction
             </>
           )}
         </button>
+
+        {/* Conditional Submit Button based on QC Score */}
+        {qcScore >= 95 && (
+          <button
+            onClick={handleRegularSubmit}
+            disabled={saving}
+            className="px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+          >
+            {saving ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Submitting...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-5 h-5" />
+                Regular Submit
+              </>
+            )}
+          </button>
+        )}
+        {qcScore < 95 && (
+          <button
+            onClick={handleReworkSubmit}
+            disabled={saving}
+            className="px-8 py-3 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+          >
+            {saving ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Submitting...
+              </>
+            ) : (
+              <>
+                <Send className="w-5 h-5" />
+                Rework Submit
+              </>
+            )}
+          </button>
+        )}
       </div>
-    </div>
+      </div>
+
+      {/* Confirmation Modal */}
+      <QCConfirmationModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={handleConfirmSubmission}
+        submissionType={submissionType}
+        loading={saving}
+        data={{
+          qaName: user?.user_name || user?.name || 'N/A',
+          agentEmail: trackerData?.user_email || trackerData?.email || 'N/A',
+          projectName: trackerData?.project_name || 'N/A',
+          taskName: trackerData?.task_name || 'N/A',
+          status: errorMetrics.status,
+          qcScore: qcScore,
+          errorCount: errorMetrics.totalErrors,
+          errorList: errorMetrics.errorList
+        }}
+      />
+    </>
   );
 };
 

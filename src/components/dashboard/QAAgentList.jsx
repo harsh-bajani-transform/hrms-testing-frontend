@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RefreshCw, RotateCcw, Check, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import api from "../../services/api";
+import { fetchProjectCategoryAFD, generateQCSample } from "../../services/qcService";
 import { useAuth } from "../../context/AuthContext";
 import { log, logError } from "../../config/environment";
 import { DateRangePicker } from "../common/CustomCalendar";
@@ -25,6 +26,7 @@ const QAAgentList = () => {
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [agentLoading, setAgentLoading] = useState(false);
+  const [qcFormLoading, setQcFormLoading] = useState(false);
   const [expandedAgents, setExpandedAgents] = useState({});
   const [agentTrackers, setAgentTrackers] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
@@ -283,9 +285,74 @@ const QAAgentList = () => {
 
   // Handle QC Form action
   const navigate = useNavigate();
-  const handleQCForm = (tracker) => {
+  const handleQCForm = async (tracker) => {
     log('[QAAgentList] Opening QC Form for tracker:', tracker.tracker_id);
-    navigate('/qc-form', { state: { tracker } });
+    
+    // Validate required data
+    if (!tracker.project_category_id) {
+      toast.error('Project category not found for this tracker');
+      logError('[QAAgentList] Missing project_category_id in tracker:', tracker);
+      return;
+    }
+    
+    if (!user?.user_id) {
+      toast.error('User not authenticated');
+      return;
+    }
+    
+    setQcFormLoading(true);
+    const loadingToast = toast.loading('Preparing QC Form...');
+    
+    try {
+      // Fetch AFD data and generate sample concurrently
+      log('[QAAgentList] Fetching AFD and generating sample for tracker:', tracker.tracker_id);
+      
+      const [afdResponse, sampleResponse] = await Promise.all([
+        fetchProjectCategoryAFD(tracker.project_category_id),
+        generateQCSample(tracker.tracker_id, user.user_id)
+      ]);
+      
+      log('[QAAgentList] AFD Response:', afdResponse);
+      log('[QAAgentList] Sample Response:', sampleResponse);
+      
+      // Extract AFD data from response
+      const afdData = afdResponse?.data?.[0]?.afd?.[0] || null;
+      
+      if (!afdData) {
+        toast.error('No AFD data found for this project category', { id: loadingToast });
+        logError('[QAAgentList] No AFD data in response:', afdResponse);
+        return;
+      }
+      
+      // Extract sample data from response
+      const sampleData = sampleResponse?.data || null;
+      
+      if (!sampleData) {
+        toast.error('Failed to generate sample data', { id: loadingToast });
+        logError('[QAAgentList] No sample data in response:', sampleResponse);
+        return;
+      }
+      
+      toast.success('QC Form ready!', { id: loadingToast });
+      
+      // Navigate to QC form with all the data
+      navigate('/qc-form', { 
+        state: { 
+          tracker,
+          afdData,
+          sampleData
+        } 
+      });
+      
+    } catch (error) {
+      logError('[QAAgentList] Error preparing QC Form:', error);
+      toast.error(
+        error.response?.data?.message || error.message || 'Failed to prepare QC Form',
+        { id: loadingToast }
+      );
+    } finally {
+      setQcFormLoading(false);
+    }
   };
 
   return (
@@ -668,10 +735,20 @@ const QAAgentList = () => {
                                             e.stopPropagation();
                                             handleQCForm(tracker);
                                           }}
-                                          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-700 text-white text-sm font-bold rounded-xl transition-all duration-300 shadow-md hover:shadow-xl transform hover:scale-105 group/btn"
+                                          disabled={qcFormLoading}
+                                          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-700 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed disabled:transform-none text-white text-sm font-bold rounded-xl transition-all duration-300 shadow-md hover:shadow-xl transform hover:scale-105 group/btn"
                                         >
-                                          <FileCheck className="w-4 h-4 group-hover/btn:rotate-12 transition-transform" />
-                                          <span>QC Form</span>
+                                          {qcFormLoading ? (
+                                            <>
+                                              <Loader2 className="w-4 h-4 animate-spin" />
+                                              <span>Loading...</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <FileCheck className="w-4 h-4 group-hover/btn:rotate-12 transition-transform" />
+                                              <span>QC Form</span>
+                                            </>
+                                          )}
                                         </button>
                                       </td>
                                     </tr>
