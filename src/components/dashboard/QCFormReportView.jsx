@@ -481,9 +481,9 @@ const QCFormReportView = () => {
 
                       {/* QC Score */}
                       <td className="px-4 py-4 align-middle text-center">
-                        <div className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 font-bold text-sm shadow-sm ${getScoreColor(report.qc_score)}`}>
+                        <div className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 font-bold text-sm shadow-sm ${getScoreColor(Number(report.qc_score || 0))}`}>
                           <Award className="w-4 h-4" />
-                          {report.qc_score.toFixed(2)}%
+                          {Number(report.qc_score || 0).toFixed(2)}%
                         </div>
                       </td>
                     </tr>

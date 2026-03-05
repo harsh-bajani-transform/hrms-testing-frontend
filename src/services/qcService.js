@@ -99,3 +99,46 @@ export const generateQCSample = async (tracker_id, logged_in_user_id) => {
     throw error;
   }
 };
+
+/**
+ * Save QC Form Record
+ * @param {Object} payload - Complete QC form data payload
+ * @returns {Promise} Response data
+ */
+export const saveQCRecord = async (payload) => {
+  try {
+    log(`[QC Service] Saving QC record for tracker ${payload.tracker_id}`);
+
+    const response = await nodeApi.post("/qc-records/save", payload);
+
+    log(`[QC Service] QC record saved successfully:`, response.data);
+    return response.data;
+  } catch (error) {
+    logError("[QC Service] Error saving QC record:", error);
+    throw error;
+  }
+};
+
+/**
+ * Fetch QC Form Records
+ * @param {number|null} logged_in_user_id - Optional user ID to filter records for agent view
+ * @returns {Promise} List of QC records
+ */
+export const getQCRecordsList = async (logged_in_user_id = null) => {
+  try {
+    log(`[QC Service] Fetching QC records list`);
+
+    // Construct query params if logged_in_user_id is provided
+    const url = logged_in_user_id
+      ? `/qc-records/list?logged_in_user_id=${logged_in_user_id}`
+      : "/qc-records/list";
+
+    const response = await nodeApi.get(url);
+
+    log(`[QC Service] QC records fetched successfully:`, response.data);
+    return response.data;
+  } catch (error) {
+    logError("[QC Service] Error fetching QC records:", error);
+    throw error;
+  }
+};
