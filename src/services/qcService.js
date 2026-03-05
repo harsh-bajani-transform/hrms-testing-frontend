@@ -93,3 +93,29 @@ export const generateQCSample = async (tracker_id, logged_in_user_id) => {
     throw error;
   }
 };
+
+/**
+ * Save QC record to database
+ * @param {Object} payload - QC record data
+ * @returns {Promise} Save response
+ */
+export const saveQCRecord = async (payload) => {
+  try {
+    log(`[QC Service] Saving QC record for agent ${payload.agent_user_id}`);
+    console.log('[QC Service] Full payload:', JSON.stringify(payload, null, 2));
+    
+    const response = await nodeApi.post("/qc-records/save", payload);
+    
+    console.log('[QC Service] Response status:', response.status);
+    console.log('[QC Service] Response data:', response.data);
+    
+    log(`[QC Service] QC record saved successfully:`, response.data);
+    return response.data;
+  } catch (error) {
+    console.error("[QC Service] Error saving QC record:", error);
+    console.error("[QC Service] Error response:", error.response?.data);
+    console.error("[QC Service] Error status:", error.response?.status);
+    logError("[QC Service] Error saving QC record:", error);
+    throw error;
+  }
+};

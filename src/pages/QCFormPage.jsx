@@ -26,7 +26,7 @@ import {
   Send
 } from 'lucide-react';
 import api from '../services/api';
-import { generateQCSample } from '../services/qcService';
+import { generateQCSample, saveQCRecord } from '../services/qcService';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorMessage from '../components/common/ErrorMessage';
 import MultiSelectWithCheckbox from '../components/common/MultiSelectWithCheckbox';
@@ -55,6 +55,8 @@ const QCFormPage = () => {
   // Form data from API
   const [formData, setFormData] = useState([]);
   const [afdData, setAfdData] = useState(null); // AFD with categories and subcategories
+  const [totalRecords, setTotalRecords] = useState(0); // Total records from API
+  const [sampleSize, setSampleSize] = useState(0); // Sample size from API
   
   // Form state - errors selected for each record
   const [formRows, setFormRows] = useState([]);
@@ -187,7 +189,16 @@ const QCFormPage = () => {
           
           if (sampleResponse.success && sampleResponse.data) {
             sampleData = sampleResponse.data.sample_data || [];
+            
+            // Extract total_records and sample_size from API response
+            const apiTotalRecords = sampleResponse.data.total_records || 0;
+            const apiSampleSize = sampleResponse.data.sample_size || 0;
+            
+            setTotalRecords(apiTotalRecords);
+            setSampleSize(apiSampleSize);
+            
             console.log('[QCFormPage] Sample data generated:', sampleData);
+            console.log('[QCFormPage] Total Records:', apiTotalRecords, 'Sample Size:', apiSampleSize);
           } else {
             console.warn('[QCFormPage] No sample data returned');
           }
@@ -404,33 +415,185 @@ const QCFormPage = () => {
     try {
       setSaving(true);
 
-      // TODO: Replace with actual API call
-      // const response = await api.post('/qc/form/submit', {
-      //   tracker_id: trackerData.tracker_id,
-      //   rows: formRows,
-      //   qc_score: qcScore,
-      //   status: submissionType === 'regular' ? 'Regular' : submissionType === 'rework' ? 'Rework' : 'Correction',
-      //   comments: comments
-      // });
+      // Validate required data
+      if (!trackerData || !user) {
+        throw new Error('Missing tracker data or user information');
+      }
 
-      console.log('Submitting with comments:', comments);
+      // Format error list from formRows
+      const errorList = [];
+      formRows.forEach((row, rowIndex) => {
+        row.errors.forEach(error => {
+          const category = afdData?.categories.find(cat => cat.qc_afd_id === error.categoryId);
+          const subcategory = category?.subcategories.find(sub => sub.qc_afd_id === error.subcategoryId);
+          
+          if (category && subcategory) {
+            errorList.push({
+              row: rowIndex + 1,
+              category: category.name,
+              subcategory: subcategory.name,
+              error: `${category.name} - ${subcategory.name}`,
+              points: subcategory.points
+            });
+          }
+        });
+      });
 
-      // Mock success
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Map submission type to status
+      const statusMap = {
+        'regular': 'Approved',
+        'rework': 'Rework',
+        'correction': 'Correction'
+      };
+      const status = statusMap[submissionType] || 'Approved';
+
+      // Extract date from tracker data and format to YYYY-MM-DD
+      let formattedDate = '';
       
-      const successMessage = submissionType === 'regular' 
-        ? 'QC Form submitted successfully as Regular!' 
-        : submissionType === 'rework'
-        ? 'QC Form submitted for Rework!'
-        : 'Correction request submitted!';
+      // Try different date fields from tracker data
+      const possibleDates = [
+        trackerData.tracker_date,
+        trackerData.date_time,
+        trackerData.created_at,
+        trackerData.submission_date,
+        trackerData.date
+      ];
       
-      toast.success(successMessage);
-      setShowConfirmModal(false);
-      navigate(-1);
+      // Find first valid date
+      const dateSource = possibleDates.find(date => date && date.trim() !== '');
+      
+      if (dateSource) {
+        // Remove time and GMT parts if present
+        let cleanDate = dateSource.trim();
+        
+        // Handle formats like "Wed, 05 Mar 2026 14:30:23 GMT"
+        if (cleanDate.includes(',')) {
+          const parts = cleanDate.split(',')[1].trim(); // Get "05 Mar 2026 14:30:23 GMT"
+          const dateParts = parts.split(' '); // ["05", "Mar", "2026", ...]
+          
+          if (dateParts.length >= 3) {
+            const day = dateParts[0];
+            const month = dateParts[1];
+            const year = dateParts[2];
+            
+            // Convert month name to number
+            const monthMap = {
+              'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+              'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+              'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+            };
+            
+            const monthNum = monthMap[month] || '01';
+            formattedDate = `${year}-${monthNum}-${day.padStart(2, '0')}`;
+          }
+        }
+        // Handle ISO format "2026-03-05T14:30:23Z"
+        else if (cleanDate.includes('T')) {
+          formattedDate = cleanDate.split('T')[0];
+        }
+        // Handle format "2026-03-05 14:30:23"
+        else if (cleanDate.includes(' ')) {
+          formattedDate = cleanDate.split(' ')[0];
+        }
+        // Handle format "2026-03-05"
+        else if (cleanDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          formattedDate = cleanDate;
+        }
+      }
+      
+      // If still no valid date, use today's date
+      if (!formattedDate || formattedDate === '') {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        formattedDate = `${year}-${month}-${day}`;
+      }
+      
+      console.log('[QCFormPage] Date extraction:', {
+        trackerDate: trackerData.tracker_date,
+        dateTime: trackerData.date_time,
+        createdAt: trackerData.created_at,
+        formattedDate
+      });
+
+      // Validate date format
+      if (!formattedDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        console.error('[QCFormPage] Invalid date format:', formattedDate);
+        throw new Error('Invalid date format. Expected YYYY-MM-DD');
+      }
+
+      // Prepare payload for API
+      const payload = {
+        logged_in_user_id: user?.user_id || user?.id,
+        tracker_id: trackerData.tracker_id,
+        ass_manager_id: trackerData.assistant_manager_id || trackerData.asst_manager_id || trackerData.project_manager_id || null,
+        qc_user_id: user?.user_id || user?.id,
+        agent_user_id: trackerData.user_id || trackerData.agent_user_id || trackerData.agent_id,
+        project_id: trackerData.project_id,
+        task_id: trackerData.task_id,
+        file_path: trackerData.tracker_file || trackerData.file_path || '',
+        date_of_file_submission: formattedDate,
+        qc_score: parseFloat(qcScore.toFixed(2)),
+        status: status,
+        file_record_count: totalRecords || errorMetrics.recordCount,
+        data_generated_count: sampleSize || errorMetrics.tenPercentCount,
+        qc_file_records: formRows.length,
+        error_score: parseFloat((100 - qcScore).toFixed(2)),
+        error_list: errorList,
+        comments: comments || ''
+      };
+
+      console.log('[QCFormPage] Tracker Data:', trackerData);
+      console.log('[QCFormPage] User Data:', user);
+      console.log('[QCFormPage] Submitting QC record with payload:', JSON.stringify(payload, null, 2));
+
+      // Validate required fields
+      const requiredFields = ['qc_user_id', 'agent_user_id', 'project_id', 'task_id'];
+      const missingFields = requiredFields.filter(field => !payload[field]);
+      
+      if (missingFields.length > 0) {
+        console.error('[QCFormPage] Missing required fields:', missingFields);
+        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+      }
+
+      // Call API to save QC record
+      const response = await saveQCRecord(payload);
+
+      console.log('[QCFormPage] API Response:', response);
+
+      if (response.success || response.status === 200) {
+        const successMessage = submissionType === 'regular' 
+          ? 'QC Form submitted successfully as Regular!' 
+          : submissionType === 'rework'
+          ? 'QC Form submitted for Rework!'
+          : 'Correction request submitted!';
+        
+        toast.success(successMessage);
+        setShowConfirmModal(false);
+        
+        // Navigate back after successful submission
+        setTimeout(() => {
+          navigate(-1);
+        }, 500);
+      } else {
+        throw new Error(response.message || 'Failed to save QC record');
+      }
 
     } catch (err) {
       console.error('[QCFormPage] Error submitting form:', err);
-      toast.error('Failed to submit QC form');
+      console.error('[QCFormPage] Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
+      
+      const errorMessage = err.response?.data?.message 
+        || err.response?.data?.error 
+        || err.message 
+        || 'Failed to submit QC form';
+      
+      toast.error(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -981,7 +1144,7 @@ const QCFormPage = () => {
               <div>
                 <p className="text-sm text-slate-600 font-medium">Record Count in File</p>
                 <p className="text-2xl font-bold text-slate-800">
-                  {errorMetrics.recordCount}
+                  {totalRecords || errorMetrics.recordCount}
                 </p>
               </div>
             </div>
@@ -996,7 +1159,7 @@ const QCFormPage = () => {
               <div>
                 <p className="text-sm text-slate-600 font-medium">10% Data Generated</p>
                 <p className="text-2xl font-bold text-slate-800">
-                  {errorMetrics.tenPercentCount}
+                  {sampleSize || errorMetrics.tenPercentCount}
                 </p>
               </div>
             </div>

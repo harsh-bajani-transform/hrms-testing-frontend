@@ -40,7 +40,7 @@
 
                          {/* Tabs */}
                          {(showUsersTab || showProjectsTab) && (
-                              <div className="flex border-b border-slate-200 mb-6">
+                              <div className="flex overflow-x-auto border-b border-slate-200 mb-6 scrollbar-hide">
                                    {showUsersTab && (
                                         <button
                                              onClick={() => setActiveTab("users")}
@@ -90,6 +90,17 @@
                                              Project Category
                                         </button>
                                    )}
+
+                                   <button
+                                        onClick={() => setActiveTab("permissions")}
+                                        className={
+                                             activeTab === "permissions"
+                                                  ? activeTabClass
+                                                  : inactiveTabClass
+                                        }
+                                   >
+                                        User Permission
+                                   </button>
                               </div>
                          )}
 

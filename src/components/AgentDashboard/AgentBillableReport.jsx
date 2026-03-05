@@ -10,10 +10,11 @@ dayjs.extend(customParseFormat);
 import { fetchDailyBillableReport, fetchMonthlyBillableReport } from "../../services/billableReportService";
 import axios from "axios";
 import { useAuth } from "../../context/AuthContext";
-import { Download, Calendar as CalendarIcon, FileSpreadsheet, X, RotateCcw, ChevronDown } from "lucide-react";
+import { Download, Calendar as CalendarIcon, FileSpreadsheet, X, RotateCcw, ChevronDown, FileText, BarChart3, Award } from "lucide-react";
 import { DateRangePicker } from '../common/CustomCalendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import AgentQCReport from './AgentQCReport';
 
 
 
@@ -508,28 +509,56 @@ const BillableReport = () => {
 
   return (
     <div className="max-w-7xl mx-auto py-6 px-2 sm:px-4">
-      {/* Tabs Navigation - Match project theme */}
-      <div className="bg-white rounded-xl shadow-sm border border-blue-100 p-2 mb-6">
-        <div className="flex items-center gap-2">
+      {/* Tabs Navigation - Match QA Agent List Style */}
+      <div className="bg-white rounded-2xl shadow-lg mb-6 border border-slate-200 overflow-hidden">
+        <div className="flex border-b border-slate-200">
           <button
             onClick={() => setActiveToggle('daily')}
-            className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all duration-300 ${
+            className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
               activeToggle === 'daily'
-                ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md'
-                : 'text-blue-700 hover:bg-blue-50'
+                ? 'text-blue-600 bg-blue-50'
+                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
             }`}
           >
-            Daily Report
+            <div className="flex items-center justify-center gap-2">
+              <FileText className="w-4 h-4" />
+              <span>Daily Report</span>
+            </div>
+            {activeToggle === 'daily' && (
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+            )}
           </button>
           <button
             onClick={() => setActiveToggle('monthly')}
-            className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all duration-300 ${
+            className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
               activeToggle === 'monthly'
-                ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md'
-                : 'text-blue-700 hover:bg-blue-50'
+                ? 'text-blue-600 bg-blue-50'
+                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
             }`}
           >
-            Monthly Report
+            <div className="flex items-center justify-center gap-2">
+              <BarChart3 className="w-4 h-4" />
+              <span>Monthly Report</span>
+            </div>
+            {activeToggle === 'monthly' && (
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveToggle('qc')}
+            className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
+              activeToggle === 'qc'
+                ? 'text-blue-600 bg-blue-50'
+                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <Award className="w-4 h-4" />
+              <span>QC Report</span>
+            </div>
+            {activeToggle === 'qc' && (
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+            )}
           </button>
         </div>
       </div>
@@ -800,6 +829,11 @@ const BillableReport = () => {
             )}
           </div>
         </div>
+      )}
+
+      {/* QC Report view */}
+      {activeToggle === 'qc' && (
+        <AgentQCReport />
       )}
     </div>
   );

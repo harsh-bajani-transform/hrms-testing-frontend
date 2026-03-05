@@ -23,7 +23,8 @@ import {
   FileText,
   Users,
   Briefcase,
-  Brain
+  Brain,
+  UserCheck
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import GeminiKeyModal from "../GeminiKeyModal";
@@ -135,6 +136,13 @@ const Header = ({
       setIsMobileMenuOpen(false);
       return;
     }
+    if (view === 'QA_AGENT_AUDIT') {
+      console.log('🚀 [Header goTo] Navigating to QA Agent Audit');
+      // For Admin, Super Admin, PM, and Assistant Manager
+      navigate('/dashboard?tab=qa_agent_audit');
+      setIsMobileMenuOpen(false);
+      return;
+    }
     
     // Handle Manage tab for Assistant Managers - route to /dashboard with tab=manage
     if (view === ViewState.ADMIN_PANEL && roleId === 4) {
@@ -198,8 +206,8 @@ const Header = ({
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
         { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+        { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
-        { view: ViewState.ENTRY, label: "User Permission", icon: PenTool },
       ];
     }
     // For agents (role_id 6 or role includes 'AGENT')
@@ -228,8 +236,8 @@ const Header = ({
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
             { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
             { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+            { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
             { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
-            { view: ViewState.ENTRY, label: "User Permission", icon: PenTool },
           ];
         }
         if (roleId === 4) {
@@ -237,15 +245,14 @@ const Header = ({
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
             { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
             { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+            { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
             { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
-            { view: ViewState.ENTRY, label: "User Permission", icon: PenTool },
           ];
         }
         // All other role_ids (not admin/superadmin)
         return [
           { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
           { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
-          { view: ViewState.ENTRY, label: "User Permission", icon: PenTool },
         ];
       }
       return [];
@@ -262,8 +269,8 @@ const Header = ({
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
         { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+        { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
-        { view: ViewState.ENTRY, label: "User Permission", icon: PenTool },
       ];
     }
     // Project Manager fallback
@@ -272,8 +279,8 @@ const Header = ({
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
         { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+        { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
-        { view: ViewState.ENTRY, label: "User Permission", icon: PenTool },
       ];
     }
     // Default: show nothing or fallback
@@ -307,21 +314,26 @@ const Header = ({
       return currentPath === '/dashboard' && currentTab === 'agent_file_report';
     }
 
+    // Check for QA Agent Audit
+    if (view === 'QA_AGENT_AUDIT') {
+      return currentPath === '/dashboard' && currentTab === 'qa_agent_audit';
+    }
+
     // Check for Manage/Admin Panel
     if (view === ViewState.ADMIN_PANEL) {
       return (currentPath === '/admin' || (currentPath === '/dashboard' && currentTab === 'manage'));
     }
 
-    // Check for Entry/User Permission/Tracker
+    // Check for Entry/Tracker (Agents only)
     if (view === ViewState.ENTRY) {
       // For agents, check if current path is /agent
       if (roleId === 6 || role.includes('AGENT')) {
         return currentPath === '/agent';
       }
-      return currentPath === '/entry';
+      return false; // Non-agents don't have this in header anymore
     }
 
-    // Check for AI Evaluation` (Agents only)
+    // Check for AI Evaluation (Agents only)
     if (view === 'AI_EVALUATION') {
       return currentPath === '/ai-evaluation';
     }

@@ -4,6 +4,7 @@ import UsersManagement from "./UsersManagement";
 import ProjectsManagement from ".././project/ProjectsManagement";
 import AFDManagement from "../afd/AFDManagement";
 import ProjectCategory from "../category/ProjectCategory";
+import UserTrackingView from "../../../common/UserTrackingView";
 import { fetchUsersList } from "../../../../services/authService";
 import { fetchProjectsList } from "../../../../services/projectService";
 import { useAuth } from "../../../../context/AuthContext";
@@ -176,6 +177,10 @@ const ManageModule = ({ activeTab }) => {
 
                {activeTab === "category" && canManageProjects && (
                     <ProjectCategory />
+               )}
+
+               {activeTab === "permissions" && canManageUsers && (
+                    <UserTrackingView />
                )}
           </>
      );

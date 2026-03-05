@@ -12,9 +12,11 @@ const nodeApi = axios.create({
 
 nodeApi.interceptors.request.use(
   (requestConfig) => {
-    const token = localStorage.getItem(config.tokenKey);
+    const token = sessionStorage.getItem(config.tokenKey) || localStorage.getItem(config.tokenKey);
     if (token) {
       requestConfig.headers.Authorization = `Bearer ${token}`;
+    } else {
+      console.warn('[Node API] No auth token found in session or local storage');
     }
 
     if (requestConfig.data instanceof FormData) {
@@ -23,6 +25,7 @@ nodeApi.interceptors.request.use(
     }
 
     log(`[Node API Request] ${requestConfig.method?.toUpperCase()} ${requestConfig.url}`);
+    log(`[Node API Request] Payload:`, requestConfig.data);
 
     return requestConfig;
   },
