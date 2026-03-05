@@ -186,7 +186,7 @@ const QCFormPage = () => {
           );
           
           if (sampleResponse.success && sampleResponse.data) {
-            sampleData = sampleResponse.data.records || [];
+            sampleData = sampleResponse.data.sample_data || [];
             console.log('[QCFormPage] Sample data generated:', sampleData);
           } else {
             console.warn('[QCFormPage] No sample data returned');
@@ -438,10 +438,16 @@ const QCFormPage = () => {
 
   // Handle file download
   const handleDownload = () => {
-    if (trackerData?.tracker_file) {
-      const fileUrl = `${import.meta.env.VITE_BACKEND_URL || ''}/${trackerData.tracker_file}`;
+    if (trackerData?.tracker_id) {
+      const backendUrl = import.meta.env.VITE_API_NODE_BASE_URL || 'http://localhost:8000/api/v1';
+      // Strip /v1 if present to form route, though typically routes start without /v1 here if backend is set up directly. 
+      // Checking the qcService.js, it uses nodeApi.post("/qc-records/generate-sample").
+      // nodeApi probably configures baseURL as VITE_API_NODE_BASE_URL.
+      // So this URL is correct:
+      const fileUrl = `${backendUrl}/qc-records/download-sample/${trackerData.tracker_id}?logged_in_user_id=${user?.user_id}`;
+      // Open the streaming API endpoint directly to trigger browser download
       window.open(fileUrl, '_blank');
-      toast.success('Downloading file...');
+      toast.success('Downloading 10% sample file...');
     } else {
       toast.error('No file available for download');
     }
