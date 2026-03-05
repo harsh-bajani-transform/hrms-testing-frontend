@@ -3,112 +3,39 @@
  * Author: Naitik Maisuriya
  * Description: QC Form Report View - Displays QC evaluation records with detailed metrics
  */
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { FileCheck, Calendar, Users, Award, AlertCircle, CheckCircle2, Download, Search, X, Filter, RotateCcw } from "lucide-react";
 import { DateRangePicker } from "../common/CustomCalendar";
 import SearchableSelect from "../common/SearchableSelect";
-
-// Dummy data for demonstration
-const dummyQCReports = [
-  {
-    id: 1,
-    evaluation_datetime: "2026-02-27T10:30:00",
-    work_date: "2026-02-26",
-    assistant_manager: "Sarah Johnson",
-    qa_agent: "Michael Chen",
-    agent: "John Doe",
-    project_name: "Customer Support Portal",
-    task_name: "Data Entry",
-    total_record: 150,
-    qc_record: 145,
-    error_count: 5,
-    error_list: ["Missing Field", "Incorrect Format", "Duplicate Entry"],
-    status: "Regular",
-    qc_score: 96.67
-  },
-  {
-    id: 2,
-    evaluation_datetime: "2026-02-27T09:15:00",
-    work_date: "2026-02-26",
-    assistant_manager: "David Wilson",
-    qa_agent: "Emily Rodriguez",
-    agent: "Jane Smith",
-    project_name: "Invoice Processing",
-    task_name: "Invoice Verification",
-    total_record: 200,
-    qc_record: 180,
-    error_count: 20,
-    error_list: ["Calculation Error", "Missing Signature", "Wrong Date", "Invalid Amount"],
-    status: "Rework",
-    qc_score: 90.00
-  },
-  {
-    id: 3,
-    evaluation_datetime: "2026-02-27T11:45:00",
-    work_date: "2026-02-27",
-    assistant_manager: "Sarah Johnson",
-    qa_agent: "Michael Chen",
-    agent: "Robert Brown",
-    project_name: "Customer Support Portal",
-    task_name: "Ticket Resolution",
-    total_record: 100,
-    qc_record: 98,
-    error_count: 2,
-    error_list: ["Incomplete Response"],
-    status: "Regular",
-    qc_score: 98.00
-  },
-  {
-    id: 4,
-    evaluation_datetime: "2026-02-27T08:20:00",
-    work_date: "2026-02-26",
-    assistant_manager: "David Wilson",
-    qa_agent: "Emily Rodriguez",
-    agent: "Alice Johnson",
-    project_name: "Medical Records",
-    task_name: "Data Validation",
-    total_record: 180,
-    qc_record: 165,
-    error_count: 15,
-    error_list: ["Missing Information", "Incorrect Code", "Data Mismatch", "Format Error"],
-    status: "Rework",
-    qc_score: 91.67
-  },
-  {
-    id: 5,
-    evaluation_datetime: "2026-02-26T16:30:00",
-    work_date: "2026-02-25",
-    assistant_manager: "Sarah Johnson",
-    qa_agent: "Michael Chen",
-    agent: "Tom Wilson",
-    project_name: "E-commerce Platform",
-    task_name: "Product Cataloging",
-    total_record: 220,
-    qc_record: 218,
-    error_count: 2,
-    error_list: ["Missing Image", "Incorrect Price"],
-    status: "Regular",
-    qc_score: 99.09
-  },
-  {
-    id: 6,
-    evaluation_datetime: "2026-02-26T14:15:00",
-    work_date: "2026-02-25",
-    assistant_manager: "David Wilson",
-    qa_agent: "Emily Rodriguez",
-    agent: "Lisa Anderson",
-    project_name: "Legal Documents",
-    task_name: "Document Review",
-    total_record: 80,
-    qc_record: 70,
-    error_count: 10,
-    error_list: ["Missing Clause", "Incorrect Date", "Wrong Template", "Signature Issue"],
-    status: "Rework",
-    qc_score: 87.50
-  },
-];
+import { useAuth } from "../../context/AuthContext";
+import { getQCRecordsList } from "../../services/qcService";
 
 const QCFormReportView = () => {
+  const { user } = useAuth();
+  const [qcReports, setQcReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchReports = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      // If user is Agent (and not QA/Admin), API will filter for their own records
+      const isAgentView = user?.designation?.toLowerCase().includes('agent') && !user?.designation?.toLowerCase().includes('qa');
+      const userIdToPass = isAgentView ? user?.user_id : null;
+      
+      const response = await getQCRecordsList(userIdToPass);
+      if (response && response.success) {
+        setQcReports(response.data || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch QC reports", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchReports();
+  }, [fetchReports]);
   // Helper to get today's date in YYYY-MM-DD format
   const getTodayDate = () => {
     const today = new Date();
@@ -126,12 +53,13 @@ const QCFormReportView = () => {
 
   // Filter and search logic
   const filteredReports = useMemo(() => {
-    let filtered = dummyQCReports;
+    let filtered = qcReports;
 
-    // Filter by date range (evaluation_datetime)
+    // Filter by date range (timestamp)
     if (startDate && endDate) {
       filtered = filtered.filter(report => {
-        const evalDate = new Date(report.evaluation_datetime).toISOString().split('T')[0];
+        if (!report.timestamp) return false;
+        const evalDate = new Date(report.timestamp).toISOString().split('T')[0];
         return evalDate >= startDate && evalDate <= endDate;
       });
     }
@@ -145,16 +73,16 @@ const QCFormReportView = () => {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(report =>
-        report.agent.toLowerCase().includes(query) ||
-        report.qa_agent.toLowerCase().includes(query) ||
-        report.assistant_manager.toLowerCase().includes(query) ||
-        report.project_name.toLowerCase().includes(query) ||
-        report.task_name.toLowerCase().includes(query)
+        (report.agent_name || "").toLowerCase().includes(query) ||
+        (report.qa_name || "").toLowerCase().includes(query) ||
+        (report.am_name || "").toLowerCase().includes(query) ||
+        (report.project_name || "").toLowerCase().includes(query) ||
+        (report.task_name || "").toLowerCase().includes(query)
       );
     }
 
     return filtered;
-  }, [searchQuery, statusFilter, startDate, endDate]);
+  }, [qcReports, searchQuery, statusFilter, startDate, endDate]);
 
   // Calculate summary stats
   const stats = useMemo(() => {
@@ -229,12 +157,30 @@ const QCFormReportView = () => {
           </div>
           <div className="px-6 py-4 max-h-[calc(80vh-80px)] overflow-y-auto">
             <ul className="space-y-3">
-              {dummyQCReports.find(r => r.id === selectedErrors)?.error_list.map((error, idx) => (
-                <li key={idx} className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
-                  <span className="text-sm text-slate-700 font-medium">{error}</span>
-                </li>
-              ))}
+              {(() => {
+                const report = qcReports.find(r => r.id === selectedErrors);
+                if (!report) return null;
+                let eList = [];
+                try {
+                  eList = typeof report.error_list === 'string' ? JSON.parse(report.error_list) : (report.error_list || []);
+                } catch (e) {
+                  console.error("Error parsing error_list", e);
+                }
+                
+                if (eList.length === 0) {
+                  return <li className="text-sm text-slate-500 italic">No errors logged.</li>;
+                }
+
+                return eList.map((error, idx) => {
+                  const errorLabel = typeof error === 'object' ? (error.name || JSON.stringify(error)) : error;
+                  return (
+                    <li key={idx} className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+                      <span className="text-sm text-slate-700 font-medium">{errorLabel}</span>
+                    </li>
+                  )
+                });
+              })()}
             </ul>
           </div>
           <div className="px-6 py-4 border-t border-slate-200 bg-slate-50">
@@ -376,7 +322,16 @@ const QCFormReportView = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredReports.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan="12" className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-blue-600 animate-spin"></div>
+                      <p className="text-slate-500 font-medium text-sm">Loading QC Reports...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredReports.length === 0 ? (
                 <tr>
                   <td colSpan="12" className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center gap-3">
@@ -390,8 +345,25 @@ const QCFormReportView = () => {
                 </tr>
               ) : (
                 filteredReports.map((report, index) => {
-                  const evalDateTime = formatDateTime(report.evaluation_datetime);
-                  const workDate = formatDate(report.work_date);
+                  const evalDateTime = report.timestamp ? formatDateTime(report.timestamp) : { date: "N/A", time: "N/A" };
+                  const workDate = report.date_of_file_submission ? formatDate(report.date_of_file_submission) : "N/A";
+                  
+                  let eList = [];
+                  try {
+                    eList = typeof report.error_list === 'string' ? JSON.parse(report.error_list) : (report.error_list || []);
+                  } catch (e) {
+                    console.error("Error parsing error_list for row", e);
+                  }
+                  
+                  const errorCount = eList.length;
+                  const totalRecord = report.file_record_count || 0;
+                  const qcRecord = report['10%_qc_file_records'] || report['10%_data_generated_count'] || 0;
+                  
+                  const amName = report.am_name || "N/A";
+                  const qaName = report.qa_name || "N/A";
+                  const agentName = report.agent_name || "N/A";
+                  const projectName = report.project_name || "N/A";
+                  const taskName = report.task_name || "N/A";
                   
                   return (
                     <tr
@@ -424,9 +396,9 @@ const QCFormReportView = () => {
                       <td className="px-4 py-4 align-middle">
                         <div className="flex items-center gap-2 max-w-[140px]">
                           <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0">
-                            {report.assistant_manager.split(' ').map(n => n[0]).join('')}
+                            {amName.split(' ').map(n => n[0]).join('')}
                           </div>
-                          <span className="font-medium text-slate-800 text-sm break-words">{report.assistant_manager}</span>
+                          <span className="font-medium text-slate-800 text-sm break-words">{amName}</span>
                         </div>
                       </td>
 
@@ -434,9 +406,9 @@ const QCFormReportView = () => {
                       <td className="px-4 py-4 align-middle">
                         <div className="flex items-center gap-2 max-w-[140px]">
                           <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0">
-                            {report.qa_agent.split(' ').map(n => n[0]).join('')}
+                            {qaName.split(' ').map(n => n[0]).join('')}
                           </div>
-                          <span className="font-medium text-slate-800 text-sm break-words">{report.qa_agent}</span>
+                          <span className="font-medium text-slate-800 text-sm break-words">{qaName}</span>
                         </div>
                       </td>
 
@@ -444,18 +416,18 @@ const QCFormReportView = () => {
                       <td className="px-4 py-4 align-middle">
                         <div className="flex items-center gap-2 max-w-[140px]">
                           <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0">
-                            {report.agent.split(' ').map(n => n[0]).join('')}
+                            {agentName.split(' ').map(n => n[0]).join('')}
                           </div>
-                          <span className="font-medium text-slate-800 text-sm break-words">{report.agent}</span>
+                          <span className="font-medium text-slate-800 text-sm break-words">{agentName}</span>
                         </div>
                       </td>
 
                       {/* Project / Task */}
                       <td className="px-4 py-4 align-middle">
                         <div className="max-w-[180px]">
-                          <div className="font-bold text-slate-900 text-sm mb-1 break-words">{report.project_name}</div>
+                          <div className="font-bold text-slate-900 text-sm mb-1 break-words">{projectName}</div>
                           <div className="text-xs text-slate-600 font-medium bg-slate-100 px-2 py-1 rounded inline-block break-words">
-                            {report.task_name}
+                            {taskName}
                           </div>
                         </div>
                       </td>
@@ -463,21 +435,21 @@ const QCFormReportView = () => {
                       {/* Total Record */}
                       <td className="px-4 py-4 align-middle text-center">
                         <div className="inline-flex items-center justify-center">
-                          <span className="font-bold text-slate-800 text-sm">{report.total_record}</span>
+                          <span className="font-bold text-slate-800 text-sm">{totalRecord}</span>
                         </div>
                       </td>
 
                       {/* QC Record */}
                       <td className="px-4 py-4 align-middle text-center">
                         <div className="inline-flex items-center justify-center">
-                          <span className="font-bold text-slate-800 text-sm">{report.qc_record}</span>
+                          <span className="font-bold text-slate-800 text-sm">{qcRecord}</span>
                         </div>
                       </td>
 
                       {/* Errors */}
                       <td className="px-4 py-4 align-middle text-center">
                         <div className="inline-flex items-center justify-center">
-                          <span className="font-bold text-slate-800 text-sm">{report.error_count}</span>
+                          <span className="font-bold text-slate-800 text-sm">{errorCount}</span>
                         </div>
                       </td>
 
@@ -488,7 +460,7 @@ const QCFormReportView = () => {
                           className="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-blue-100 border border-slate-200 hover:border-blue-300 rounded-lg text-slate-700 hover:text-blue-700 text-xs font-bold transition-all"
                         >
                           <AlertCircle className="w-3 h-3" />
-                          View ({report.error_list.length})
+                          View ({errorCount})
                         </button>
                       </td>
 

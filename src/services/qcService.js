@@ -15,20 +15,22 @@ import { log, logError } from "../config/environment";
  */
 export const saveTempQC = async (payload) => {
   try {
-    log(`[QC Service] Saving temp QC for user ${payload.user_id} on ${payload.date}`);
-    
-    console.log('[QC Service] Request payload:', payload);
-    
+    log(
+      `[QC Service] Saving temp QC for user ${payload.user_id} on ${payload.date}`,
+    );
+
+    console.log("[QC Service] Request payload:", payload);
+
     const response = await api.post("/qc/temp-qc", payload);
-    
+
     log(`[QC Service] Temp QC saved successfully:`, response.data);
     return response.data;
   } catch (error) {
     logError("[QC Service] Error saving temp QC:", error);
-    console.error('[QC Service] Error details:', {
+    console.error("[QC Service] Error details:", {
       status: error.response?.status,
       data: error.response?.data,
-      message: error.message
+      message: error.message,
     });
     throw error;
   }
@@ -41,10 +43,14 @@ export const saveTempQC = async (payload) => {
  */
 export const fetchProjectCategoryAFD = async (project_category_id) => {
   try {
-    log(`[QC Service] Fetching AFD for project category ${project_category_id}`);
-    
-    const response = await api.post("/project_category/list", { project_category_id });
-    
+    log(
+      `[QC Service] Fetching AFD for project category ${project_category_id}`,
+    );
+
+    const response = await api.post("/project_category/list", {
+      project_category_id,
+    });
+
     log(`[QC Service] AFD data fetched successfully:`, response.data);
     return response.data;
   } catch (error) {
@@ -60,9 +66,9 @@ export const fetchProjectCategoryAFD = async (project_category_id) => {
 export const fetchQCAFDList = async () => {
   try {
     log(`[QC Service] Fetching QC AFD list from Node API`);
-    
+
     const response = await nodeApi.get("/qc-afd/list");
-    
+
     log(`[QC Service] QC AFD data fetched successfully:`, response.data);
     return response.data;
   } catch (error) {
@@ -80,42 +86,16 @@ export const fetchQCAFDList = async () => {
 export const generateQCSample = async (tracker_id, logged_in_user_id) => {
   try {
     log(`[QC Service] Generating sample for tracker ${tracker_id}`);
-    
+
     const response = await nodeApi.post("/qc-records/generate-sample", {
       tracker_id,
-      logged_in_user_id
+      logged_in_user_id,
     });
-    
+
     log(`[QC Service] Sample generated successfully:`, response.data);
     return response.data;
   } catch (error) {
     logError("[QC Service] Error generating QC sample:", error);
-    throw error;
-  }
-};
-
-/**
- * Save QC record to database
- * @param {Object} payload - QC record data
- * @returns {Promise} Save response
- */
-export const saveQCRecord = async (payload) => {
-  try {
-    log(`[QC Service] Saving QC record for agent ${payload.agent_user_id}`);
-    console.log('[QC Service] Full payload:', JSON.stringify(payload, null, 2));
-    
-    const response = await nodeApi.post("/qc-records/save", payload);
-    
-    console.log('[QC Service] Response status:', response.status);
-    console.log('[QC Service] Response data:', response.data);
-    
-    log(`[QC Service] QC record saved successfully:`, response.data);
-    return response.data;
-  } catch (error) {
-    console.error("[QC Service] Error saving QC record:", error);
-    console.error("[QC Service] Error response:", error.response?.data);
-    console.error("[QC Service] Error status:", error.response?.status);
-    logError("[QC Service] Error saving QC record:", error);
     throw error;
   }
 };
