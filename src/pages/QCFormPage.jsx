@@ -561,8 +561,8 @@ const QCFormPage = () => {
         qc_score: parseFloat(qcScore.toFixed(2)),
         status: status,
         file_record_count: totalRecords || errorMetrics.recordCount,
-        data_generated_count: sampleSize || errorMetrics.tenPercentCount, // 10% data generated
-        qc_file_records: formRows.length, // 10% QC file records
+        data_generated_count: sampleSize || errorMetrics.tenPercentCount, // 10% data generated count
+        qc_file_records: formData, // The actual 10% sample data records for Cloudinary Excel generation
         error_score: parseFloat((100 - qcScore).toFixed(2)),
         error_list: errorList, // Array of error objects with category, subcategory, row, points
         comments: comments || ''
