@@ -608,10 +608,10 @@ const QCFormPage = () => {
 
       if (response.success || response.status === 200) {
         const successMessage = submissionType === 'regular' 
-          ? 'QC Form submitted successfully as Regular!' 
+          ? 'QC Form submitted & email notification sent!' 
           : submissionType === 'rework'
-          ? 'QC Form submitted for Rework!'
-          : 'Correction request submitted!';
+          ? 'QC submitted for Rework & email notification sent!'
+          : 'Correction request submitted & email notification sent!';
         
         toast.success(successMessage);
         setShowConfirmModal(false);
