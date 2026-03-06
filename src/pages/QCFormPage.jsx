@@ -104,11 +104,11 @@ const QCFormPage = () => {
     }));
     
     // Determine status based on score
-    let status = 'Regular';
+    let status = 'regular';
     if (qcScore < 80) {
-      status = 'Correction';
+      status = 'correction';
     } else if (qcScore < 95) {
-      status = 'Rework';
+      status = 'rework';
     }
     
     return {
@@ -439,13 +439,9 @@ const QCFormPage = () => {
         });
       });
 
-      // Map submission type to status
-      const statusMap = {
-        'regular': 'Approved',
-        'rework': 'Rework',
-        'correction': 'Correction'
-      };
-      const status = statusMap[submissionType] || 'Approved';
+      // Use the user-selected submission type as the status
+      // This allows QA to override the auto-calculated status if needed
+      const status = submissionType || errorMetrics.status;
 
       // Extract date from tracker data and format to YYYY-MM-DD
       let formattedDate = '';
@@ -523,11 +519,39 @@ const QCFormPage = () => {
         throw new Error('Invalid date format. Expected YYYY-MM-DD');
       }
 
-      // Prepare payload for API
+      // Extract assistant manager ID from tracker data with multiple fallbacks
+      // Only accept valid IDs (not null, undefined, 0, or empty string)
+      const extractValidId = (id) => {
+        const numId = id ? Number(id) : null;
+        return numId && numId > 0 ? numId : null;
+      };
+      
+      const ass_manager_id = extractValidId(trackerData.assistant_manager_id)
+        || extractValidId(trackerData.asst_manager_id)
+        || extractValidId(trackerData.ass_manager_id)
+        || extractValidId(trackerData.project_manager_id)
+        || extractValidId(trackerData.manager_id)
+        || null;
+
+      console.log('[QCFormPage] Assistant Manager ID Extraction:', {
+        assistant_manager_id: trackerData.assistant_manager_id,
+        asst_manager_id: trackerData.asst_manager_id,
+        ass_manager_id: trackerData.ass_manager_id,
+        project_manager_id: trackerData.project_manager_id,
+        manager_id: trackerData.manager_id,
+        extracted_value: ass_manager_id,
+        is_null: ass_manager_id === null,
+        is_valid: ass_manager_id !== null && ass_manager_id > 0
+      });
+
+      // Prepare payload for API - matching database schema exactly
       const payload = {
+        // Authentication & Reference
         logged_in_user_id: user?.user_id || user?.id,
         tracker_id: trackerData.tracker_id,
-        ass_manager_id: trackerData.assistant_manager_id || trackerData.asst_manager_id || trackerData.project_manager_id || null,
+        
+        // Database Fields (matching exact schema)
+        ass_manager_id: ass_manager_id, // Will be null if not found (not 0)
         qc_user_id: user?.user_id || user?.id,
         agent_user_id: trackerData.user_id || trackerData.agent_user_id || trackerData.agent_id,
         project_id: trackerData.project_id,
@@ -537,24 +561,44 @@ const QCFormPage = () => {
         qc_score: parseFloat(qcScore.toFixed(2)),
         status: status,
         file_record_count: totalRecords || errorMetrics.recordCount,
-        data_generated_count: sampleSize || errorMetrics.tenPercentCount,
-        qc_file_records: formRows.length,
+        data_generated_count: sampleSize || errorMetrics.tenPercentCount, // 10% data generated
+        qc_file_records: formRows.length, // 10% QC file records
         error_score: parseFloat((100 - qcScore).toFixed(2)),
-        error_list: errorList,
+        error_list: errorList, // Array of error objects with category, subcategory, row, points
         comments: comments || ''
       };
 
       console.log('[QCFormPage] Tracker Data:', trackerData);
       console.log('[QCFormPage] User Data:', user);
       console.log('[QCFormPage] Submitting QC record with payload:', JSON.stringify(payload, null, 2));
+      console.log('[QCFormPage] Payload field validation:', {
+        ass_manager_id: payload.ass_manager_id,
+        qc_user_id: payload.qc_user_id,
+        agent_user_id: payload.agent_user_id,
+        project_id: payload.project_id,
+        task_id: payload.task_id,
+        date_of_file_submission: payload.date_of_file_submission,
+        qc_score: payload.qc_score,
+        status: payload.status,
+        file_record_count: payload.file_record_count,
+        data_generated_count: payload.data_generated_count,
+        qc_file_records: payload.qc_file_records,
+        error_score: payload.error_score,
+        error_list_count: payload.error_list.length
+      });
 
       // Validate required fields
-      const requiredFields = ['qc_user_id', 'agent_user_id', 'project_id', 'task_id'];
+      const requiredFields = ['qc_user_id', 'agent_user_id', 'project_id', 'task_id', 'date_of_file_submission'];
       const missingFields = requiredFields.filter(field => !payload[field]);
       
       if (missingFields.length > 0) {
         console.error('[QCFormPage] Missing required fields:', missingFields);
         throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+      }
+
+      // Validate date is not empty
+      if (!payload.date_of_file_submission || payload.date_of_file_submission === '') {
+        throw new Error('Date of file submission is required and cannot be empty');
       }
 
       // Call API to save QC record
@@ -1112,12 +1156,12 @@ const QCFormPage = () => {
           <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
             <div className="flex items-center gap-3">
               <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                errorMetrics.status === 'Regular' ? 'bg-green-100' : 
-                errorMetrics.status === 'Rework' ? 'bg-yellow-100' : 'bg-red-100'
+                errorMetrics.status === 'regular' ? 'bg-green-100' : 
+                errorMetrics.status === 'rework' ? 'bg-yellow-100' : 'bg-red-100'
               }`}>
-                {errorMetrics.status === 'Regular' ? (
+                {errorMetrics.status === 'regular' ? (
                   <CheckCircle2 className="w-6 h-6 text-green-600" />
-                ) : errorMetrics.status === 'Rework' ? (
+                ) : errorMetrics.status === 'rework' ? (
                   <AlertCircle className="w-6 h-6 text-yellow-600" />
                 ) : (
                   <XCircle className="w-6 h-6 text-red-600" />
@@ -1126,10 +1170,10 @@ const QCFormPage = () => {
               <div>
                 <p className="text-sm text-slate-600 font-medium">Status</p>
                 <p className={`text-lg font-bold ${
-                  errorMetrics.status === 'Regular' ? 'text-green-600' : 
-                  errorMetrics.status === 'Rework' ? 'text-yellow-600' : 'text-red-600'
+                  errorMetrics.status === 'regular' ? 'text-green-600' : 
+                  errorMetrics.status === 'rework' ? 'text-yellow-600' : 'text-red-600'
                 }`}>
-                  {errorMetrics.status}
+                  {errorMetrics.status.charAt(0).toUpperCase() + errorMetrics.status.slice(1)}
                 </p>
               </div>
             </div>
@@ -1283,7 +1327,7 @@ const QCFormPage = () => {
           agentEmail: trackerData?.user_email || trackerData?.email || 'N/A',
           projectName: trackerData?.project_name || 'N/A',
           taskName: trackerData?.task_name || 'N/A',
-          status: errorMetrics.status,
+          status: submissionType || errorMetrics.status,
           qcScore: qcScore,
           errorCount: errorMetrics.totalErrors,
           errorList: errorMetrics.errorList

@@ -304,12 +304,21 @@ const QAAgentList = () => {
     const loadingToast = toast.loading('Preparing QC Form...');
     
     try {
-      // Fetch AFD data and generate sample concurrently
+      // Fetch AFD data, generate sample, and get agent's user details concurrently
       log('[QAAgentList] Fetching AFD and generating sample for tracker:', tracker.tracker_id);
       
-      const [afdResponse, sampleResponse] = await Promise.all([
+      const [afdResponse, sampleResponse, userListResponse] = await Promise.all([
         fetchProjectCategoryAFD(tracker.project_category_id),
-        generateQCSample(tracker.tracker_id, user.user_id)
+        generateQCSample(tracker.tracker_id, user.user_id),
+        // Fetch user list to get agent's manager information
+        api.post('/user/list', {
+          user_id: user?.user_id,
+          device_id: user?.device_id || 'web',
+          device_type: user?.device_type || 'Laptop'
+        }).catch(err => {
+          logError('[QAAgentList] Failed to fetch user list:', err);
+          return { data: { data: [] } };
+        })
       ]);
       
       log('[QAAgentList] AFD Response:', afdResponse);
@@ -333,12 +342,56 @@ const QAAgentList = () => {
         return;
       }
       
+      // Find the agent's user data to get their manager
+      const usersList = userListResponse?.data?.data || [];
+      const agentUserData = usersList.find(u => String(u.user_id) === String(tracker.user_id));
+      
+      // Helper function to extract valid ID (not 0, null, or undefined)
+      const extractValidId = (id) => {
+        const numId = id ? Number(id) : null;
+        return numId && numId > 0 ? numId : null;
+      };
+      
+      // Extract assistant manager ID from agent's user data
+      const assistantManagerId = extractValidId(agentUserData?.assistant_manager_id)
+        || extractValidId(agentUserData?.asst_manager_id)
+        || extractValidId(agentUserData?.manager_id)
+        || extractValidId(tracker.assistant_manager_id)
+        || extractValidId(tracker.asst_manager_id)
+        || extractValidId(tracker.project_manager_id)
+        || null;
+      
+      log('[QAAgentList] Agent user data:', agentUserData);
+      log('[QAAgentList] Extracted assistant_manager_id:', assistantManagerId, 'is_null:', assistantManagerId === null);
+      
+      // Enhance tracker with assistant manager ID (only if valid, otherwise don't include the fields)
+      const enhancedTracker = {
+        ...tracker,
+        assistant_manager_id: assistantManagerId,
+        asst_manager_id: assistantManagerId,
+        ass_manager_id: assistantManagerId
+      };
+      
       toast.success('QC Form ready!', { id: loadingToast });
+      
+      // Log tracker data to debug assistant manager field
+      console.log('[QAAgentList] Tracker data being passed to QC form:', {
+        tracker_id: enhancedTracker.tracker_id,
+        user_id: enhancedTracker.user_id,
+        project_id: enhancedTracker.project_id,
+        task_id: enhancedTracker.task_id,
+        assistant_manager_id: enhancedTracker.assistant_manager_id,
+        asst_manager_id: enhancedTracker.asst_manager_id,
+        ass_manager_id: enhancedTracker.ass_manager_id,
+        project_manager_id: enhancedTracker.project_manager_id,
+        manager_id: enhancedTracker.manager_id,
+        all_tracker_fields: Object.keys(enhancedTracker)
+      });
       
       // Navigate to QC form with all the data
       navigate('/qc-form', { 
         state: { 
-          tracker,
+          tracker: enhancedTracker,
           afdData,
           sampleData
         } 

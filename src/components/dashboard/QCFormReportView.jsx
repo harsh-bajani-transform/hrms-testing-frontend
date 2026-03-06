@@ -4,7 +4,7 @@
  * Description: QC Form Report View - Displays QC evaluation records with detailed metrics
  */
 import React, { useState, useMemo, useEffect } from "react";
-import { FileCheck, Calendar, Users, Award, AlertCircle, CheckCircle2, Download, Search, X, Filter, RotateCcw } from "lucide-react";
+import { FileCheck, Calendar, Users, Award, AlertCircle, CheckCircle2, Download, Search, X, Filter, RotateCcw, XCircle } from "lucide-react";
 import { DateRangePicker } from "../common/CustomCalendar";
 import SearchableSelect from "../common/SearchableSelect";
 import { useAuth } from "../../context/AuthContext";
@@ -66,7 +66,7 @@ const QCFormReportView = () => {
 
     // Filter by status
     if (statusFilter !== "all") {
-      filtered = filtered.filter(report => report.status === statusFilter);
+      filtered = filtered.filter(report => report.status?.trim().toLowerCase() === statusFilter.toLowerCase());
     }
 
     // Search across multiple fields
@@ -88,10 +88,11 @@ const QCFormReportView = () => {
   const stats = useMemo(() => {
     return {
       total: filteredReports.length,
-      regular: filteredReports.filter(r => r.status === "Regular").length,
-      rework: filteredReports.filter(r => r.status === "Rework").length,
+      regular: filteredReports.filter(r => r.status?.trim().toLowerCase() === "regular").length,
+      rework: filteredReports.filter(r => r.status?.trim().toLowerCase() === "rework").length,
+      correction: filteredReports.filter(r => r.status?.trim().toLowerCase() === "correction").length,
       avgScore: filteredReports.length > 0 
-        ? (filteredReports.reduce((sum, r) => sum + r.qc_score, 0) / filteredReports.length).toFixed(2)
+        ? (filteredReports.reduce((sum, r) => sum + parseFloat(r.qc_score || 0), 0) / filteredReports.length).toFixed(2)
         : 0
     };
   }, [filteredReports]);
@@ -172,7 +173,7 @@ const QCFormReportView = () => {
                 }
 
                 return eList.map((error, idx) => {
-                  const errorLabel = typeof error === 'object' ? (error.name || JSON.stringify(error)) : error;
+                  const errorLabel = typeof error === 'object' ? (error.error || error.name || JSON.stringify(error)) : error;
                   return (
                     <li key={idx} className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
                       <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
@@ -246,7 +247,8 @@ const QCFormReportView = () => {
                 options={[
                   { value: "all", label: "All Status" },
                   { value: "Regular", label: "Regular" },
-                  { value: "Rework", label: "Rework" }
+                  { value: "Rework", label: "Rework" },
+                  { value: "Correction", label: "Correction" }
                 ]}
                 icon={Filter}
                 placeholder="Select Status"
@@ -466,15 +468,20 @@ const QCFormReportView = () => {
 
                       {/* Status */}
                       <td className="px-4 py-4 align-middle text-center">
-                        {report.status === "Regular" ? (
+                        {report.status?.trim().toLowerCase() === "regular" ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-100 text-green-700 font-medium text-xs border border-green-200">
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             Regular
                           </span>
-                        ) : (
+                        ) : report.status?.trim().toLowerCase() === "rework" ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-100 text-orange-700 font-medium text-xs border border-orange-200">
                             <AlertCircle className="w-3.5 h-3.5" />
                             Rework
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-100 text-red-700 font-medium text-xs border border-red-200">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            Correction
                           </span>
                         )}
                       </td>
@@ -501,7 +508,7 @@ const QCFormReportView = () => {
           <h3 className="text-lg font-bold text-slate-800">Statistics Summary</h3>
           <p className="text-slate-600 text-sm font-medium mt-1">Overview of evaluation metrics</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Total Reports Card */}
           <div className="relative overflow-hidden rounded-xl shadow-md hover:shadow-lg transition-all duration-300 min-w-0 group/card transform hover:-translate-y-1 bg-white border-2 border-slate-200 hover:border-blue-300">
             <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full -translate-y-12 translate-x-12"></div>
@@ -546,6 +553,22 @@ const QCFormReportView = () => {
               </div>
               <div className="p-3 rounded-xl shadow-sm shrink-0 z-10 bg-orange-100">
                 <AlertCircle className="w-6 h-6 text-orange-600" />
+              </div>
+            </div>
+          </div>
+
+          {/* Correction Card */}
+          <div className="relative overflow-hidden rounded-xl shadow-md hover:shadow-lg transition-all duration-300 min-w-0 group/card transform hover:-translate-y-1 bg-white border-2 border-slate-200 hover:border-blue-300">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/5 rounded-full -translate-y-12 translate-x-12"></div>
+            <div className="relative p-5 flex items-center justify-between gap-4">
+              <div className="flex-1 min-w-0 z-10">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <p className="text-xs font-bold uppercase tracking-wide truncate text-slate-600">Correction</p>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-extrabold truncate text-slate-900">{stats.correction}</h3>
+              </div>
+              <div className="p-3 rounded-xl shadow-sm shrink-0 z-10 bg-red-100">
+                <XCircle className="w-6 h-6 text-red-600" />
               </div>
             </div>
           </div>

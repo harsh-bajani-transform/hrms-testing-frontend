@@ -7,8 +7,7 @@ import {
   Users,
   FolderKanban,
   DollarSign,
-  Gem,
-  UserCheck
+  Gem
 } from 'lucide-react';
 
 const TabsNavigation = ({
@@ -35,7 +34,6 @@ const TabsNavigation = ({
     ...(isProjectManager || isAssistantManager || isAdmin || isSuperAdmin ? [
       { id: 'user_monthly_report', label: 'User Monthly Report', icon: Users, visible: true, disabled: false },
       { id: 'project_monthly_report', label: 'Project Monthly Report', icon: FolderKanban, visible: true, disabled: false },
-      { id: 'qa_agent_audit', label: 'QA Agent Audit', icon: UserCheck, visible: true, disabled: false },
       { id: 'incentives', label: 'Agent Incentives', icon: DollarSign, visible: true, disabled: false },
       { id: 'mgmt_incentives', label: 'Management Incentives', icon: Gem, visible: true, disabled: false },
     ] : [

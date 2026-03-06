@@ -6,8 +6,7 @@ import {
   Briefcase,
   Users,
   FolderKanban,
-  DollarSign,
-  UserCheck
+  DollarSign
 } from 'lucide-react';
 
 const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab }) => {
@@ -16,7 +15,6 @@ const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab }) => {
     { id: 'billable_report', label: 'Billable Report', icon: Briefcase },
     { id: 'user_monthly_report', label: 'User Monthly Goal', icon: Users },
     { id: 'project_monthly_report', label: 'Project Monthly Report', icon: FolderKanban },
-    { id: 'qa_agent_audit', label: 'QA Agent Audit', icon: UserCheck },
     { id: 'incentives', label: 'Agent Incentives', icon: DollarSign, disabled: true }
   ];
 
