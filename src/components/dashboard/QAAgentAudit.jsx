@@ -7,7 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
-// import axios from 'axios'; // TODO: Uncomment when API is ready
+import nodeApi from '../../services/nodeApi';
 import * as XLSX from 'xlsx';
 import { 
   Download, 
@@ -81,23 +81,27 @@ const QAAgentAudit = () => {
   };
 
   // Helper function to handle file download
-  const handleFileDownload = (fileName, _fileUrl) => {
-    if (!fileName) {
-      toast.error('No file available to download');
+  const handleFileDownload = (fileName, fileUrl) => {
+    if (!fileName || !fileUrl) {
+      toast.error('File not available for download');
       return;
     }
     
-    // TODO: Replace with actual file download logic when API is ready
-    // For now, show a toast message
-    toast.success(`Downloading ${fileName}...`);
-    
-    // Example implementation (uncomment when fileUrl is available):
-    // const link = document.createElement('a');
-    // link.href = fileUrl;
-    // link.download = fileName;
-    // document.body.appendChild(link);
-    // link.click();
-    // document.body.removeChild(link);
+    try {
+      // Create a temporary anchor element to trigger download
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.download = fileName;
+      link.target = '_blank'; // Open in new tab if direct download fails
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success(`Downloading ${fileName}...`);
+    } catch (error) {
+      console.error('[QAAgentAudit] File download error:', error);
+      toast.error('Failed to download file');
+    }
   };
 
   // Simple MonthPicker component
@@ -217,7 +221,20 @@ const QAAgentAudit = () => {
   const groupedByQAAgent = React.useMemo(() => {
     const grouped = {};
     
-    auditData.forEach(record => {
+    // Filter by month if monthFilter is set
+    let filteredData = auditData;
+    if (monthFilter) {
+      const [year, month] = monthFilter.split('-');
+      filteredData = auditData.filter(record => {
+        if (!record.audit_datetime) return false;
+        const recordDate = new Date(record.audit_datetime);
+        const recordYear = recordDate.getFullYear();
+        const recordMonth = recordDate.getMonth() + 1; // 0-indexed
+        return recordYear === parseInt(year) && recordMonth === parseInt(month);
+      });
+    }
+    
+    filteredData.forEach(record => {
       const qaName = record.qa_agent_name || 'Unknown QA Agent';
       if (!grouped[qaName]) {
         grouped[qaName] = {
@@ -244,7 +261,7 @@ const QAAgentAudit = () => {
     });
     
     return Object.values(grouped);
-  }, [auditData]);
+  }, [auditData, monthFilter]);
 
   // Filter grouped data by search query
   const filteredQAAgents = React.useMemo(() => {
@@ -401,100 +418,46 @@ const QAAgentAudit = () => {
       setError(null);
 
       try {
-        // TODO: Replace with actual API endpoint when backend is ready
-        const payload = {
-          logged_in_user_id: user?.user_id,
-          month_year: monthFilter
-        };
+        console.log('[QAAgentAudit] Fetching audit data for user:', user?.user_id);
 
-        console.log('[QAAgentAudit] Fetching audit data:', payload);
-
-        // Placeholder API call - replace with actual endpoint
-        // const response = await axios.post('/api/qa-agent-audit', payload);
-        
-        // Mock data for now - expanded to show multiple QA agents
-        const mockData = [
-          {
-            audit_id: 1,
-            audit_datetime: '2024-03-01 11:30:00',
-            qa_agent_name: 'John QA',
-            qa_agent_id: 1,
-            agent_name: 'Alice Agent',
-            project_name: 'Project Alpha',
-            task_name: 'Data Entry',
-            file_name: 'batch_001.xlsx',
-            total_qc_performed: 15,
-            average_qc_score: 96.5,
-            total_errors_found: 12,
-            audit_status: 'Approved',
-            comments: 'Excellent quality checking'
-          },
-          {
-            audit_id: 2,
-            audit_datetime: '2024-03-02 14:45:00',
-            qa_agent_name: 'Jane QA',
-            qa_agent_id: 2,
-            agent_name: 'Bob Agent',
-            project_name: 'Project Beta',
-            task_name: 'Validation',
-            file_name: 'batch_002.xlsx',
-            total_qc_performed: 20,
-            average_qc_score: 88.0,
-            total_errors_found: 38,
-            audit_status: 'Pending',
-            comments: 'Review needed'
-          },
-          {
-            audit_id: 3,
-            audit_datetime: '2024-03-03 09:15:00',
-            qa_agent_name: 'Mike QA',
-            qa_agent_id: 3,
-            agent_name: 'Carol Agent',
-            project_name: 'Project Gamma',
-            task_name: 'Processing',
-            file_name: 'batch_003.xlsx',
-            total_qc_performed: 18,
-            average_qc_score: 92.5,
-            total_errors_found: 22,
-            audit_status: 'Verified',
-            comments: 'Good performance'
-          },
-          {
-            audit_id: 4,
-            audit_datetime: '2024-03-04 10:20:00',
-            qa_agent_name: 'John QA',
-            qa_agent_id: 1,
-            agent_name: 'David Agent',
-            project_name: 'Project Alpha',
-            task_name: 'Review',
-            file_name: 'batch_004.xlsx',
-            total_qc_performed: 12,
-            average_qc_score: 94.0,
-            total_errors_found: 8,
-            audit_status: 'Approved',
-            comments: 'Consistent quality'
-          },
-          {
-            audit_id: 5,
-            audit_datetime: '2024-03-05 15:30:00',
-            qa_agent_name: 'Jane QA',
-            qa_agent_id: 2,
-            agent_name: 'Emma Agent',
-            project_name: 'Project Beta',
-            task_name: 'Data Entry',
-            file_name: 'batch_005.xlsx',
-            total_qc_performed: 25,
-            average_qc_score: 90.5,
-            total_errors_found: 28,
-            audit_status: 'Approved',
-            comments: 'Improved performance'
+        // Call the API endpoint
+        const response = await nodeApi.get('/qc-records/list', {
+          params: {
+            logged_in_user_id: user?.user_id
           }
-        ];
+        });
 
-        setAuditData(mockData);
-        
-        // When API is ready, use:
-        // setAuditData(response.data?.data || []);
+        console.log('[QAAgentAudit] API Response:', response.data);
+
+        // Map API response to expected structure
+        const apiData = response.data?.data || [];
+        const mappedData = apiData.map(record => ({
+          audit_id: record.id,
+          audit_datetime: record.timestamp || record.date_of_file_submission,
+          qa_agent_name: record.qa_name,
+          qa_agent_id: record.qc_user_id,
+          agent_name: record.agent_name,
+          project_name: record.project_name,
+          task_name: record.task_name,
+          file_name: record['10%_file_path'] ? record['10%_file_path'].split('/').pop() : (record.file_path ? record.file_path.split('/').pop() : 'N/A'),
+          file_url: record['10%_file_path'] || record.file_path || '', // URL for downloading
+          total_qc_performed: record['10%_data_generated_count'] || record.file_record_count || 0,
+          average_qc_score: record.qc_score || 0,
+          total_errors_found: record.error_score || 0,
+          audit_status: record.status || 'Pending',
+          comments: '', // Not in API response, can be added later
+          file_record_count: record.file_record_count || 0,
+          // Store original file paths for download functionality
+          file_path: record.file_path,
+          qc_file_path: record['10%_file_path'],
+          error_list: record.error_list,
+          tracker_id: record.tracker_id,
+          project_id: record.project_id,
+          task_id: record.task_id
+        }));
+
+        setAuditData(mappedData);
+        console.log('[QAAgentAudit] Mapped data:', mappedData);
 
       } catch (err) {
         console.error('[QAAgentAudit] Error fetching audit data:', err);
@@ -509,7 +472,7 @@ const QAAgentAudit = () => {
     if (user?.user_id) {
       fetchAuditData();
     }
-  }, [monthFilter, user]);
+  }, [user]);
 
   // Export to Excel
   const handleExportExcel = () => {
