@@ -20,6 +20,7 @@ import AppLayout from "../../layouts/AppLayout";
 import QATabsNavigation from "./QATabsNavigation";
 import BillableReport from "../common/BillableReport";
 import QAFilterBar from "./QAFilterBar";
+import QAIndividualAuditReport from "./QAIndividualAuditReport";
 
 const QAAgentDashboard = ({ embedded = false }) => {
   // StatCard component for dashboard stats
@@ -486,6 +487,8 @@ const QAAgentDashboard = ({ embedded = false }) => {
       )}
       
       {activeTab === 'billable_report' && <BillableReport />}
+      
+      {activeTab === 'audit_report' && <QAIndividualAuditReport />}
     </div>
   );
 

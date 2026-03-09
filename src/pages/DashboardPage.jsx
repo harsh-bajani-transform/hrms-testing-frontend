@@ -264,7 +264,13 @@ const DashboardPage = ({
   if ((roleId === 1 || roleId === 2 || roleId === 3 || isQA || isAssistantManager) && activeTab === 'agent_file_report') {
     return <QAAgentList />;
   }
-  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 4) && activeTab === 'qa_agent_audit') {
+  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 4 || roleId === 5) && activeTab === 'qa_agent_audit') {
+    // QA Agent (roleId 5) sees only the Report tab with their own data
+    if (roleId === 5) {
+      const qaAgentName = currentUser?.name || currentUser?.user_name || currentUser?.username || '';
+      return <QAAgentAudit defaultTab="audit_report" hideTabNavigation={true} filterByQAAgent={qaAgentName} />;
+    }
+    // Other roles see both tabs with all data
     return <QAAgentAudit />;
   }
 
