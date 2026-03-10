@@ -714,7 +714,6 @@ const QAAgentAudit = () => {
             const agentFilter = getAgentFilter(qaAgentName);
             const uniqueAgents = getUniqueAgents(records);
             
-            5566gf
             // Calculate statistics for this QA agent
             const totalRecords = records.length;
             const totalQCs = records.reduce((sum, r) => sum + (Number(r.total_qc_performed) || Number(r['10%_qc_file_records']) || Number(r['10%_data_generated_count']) || 0), 0);
