@@ -35,6 +35,8 @@ import MultiSelectWithCheckbox from '../common/MultiSelectWithCheckbox';
 const QAAgentAudit = () => {
   const { user } = useAuth();
 
+  console.log('[QAAgentAudit] Component rendered. User:', user);
+
   // Helper function to get QC score color classes
   const getQCScoreColorClass = (score) => {
     if (score === null || score === undefined || score === '-' || isNaN(Number(score))) return 'text-slate-700';
@@ -130,7 +132,7 @@ const QAAgentAudit = () => {
       const [year, month] = value.split('-');
       const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
       return `${monthNames[parseInt(month) - 1]} ${year}`;
-    })() : 'Select Month';
+    })() : 'All Months';
 
     return (
       <div>
@@ -149,6 +151,17 @@ const QAAgentAudit = () => {
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-[280px] border-2 border-blue-200 bg-white p-4" align="start">
+            {/* All Months Button */}
+            <button
+              type="button"
+              onClick={() => {
+                onChange('');
+                setShowPicker(false);
+              }}
+              className="w-full mb-3 px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 transition-colors"
+            >
+              All Months
+            </button>
             <div className="flex items-center justify-between mb-4">
               <button
                 type="button"
@@ -200,7 +213,7 @@ const QAAgentAudit = () => {
 
   // State management
   const [activeTab, setActiveTab] = useState('audit_form'); // 'audit_form' or 'audit_report'
-  const [monthFilter, setMonthFilter] = useState(() => getCurrentMonth());
+  const [monthFilter, setMonthFilter] = useState(''); // Start with no filter to show all data
   const [auditData, setAuditData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -221,17 +234,30 @@ const QAAgentAudit = () => {
   const groupedByQAAgent = React.useMemo(() => {
     const grouped = {};
     
+    console.log('[QAAgentAudit] Grouping audit data. Total records:', auditData.length);
+    console.log('[QAAgentAudit] Month filter:', monthFilter);
+    console.log('[QAAgentAudit] Sample record:', auditData[0]);
+    
     // Filter by month if monthFilter is set
     let filteredData = auditData;
-    if (monthFilter) {
+    if (monthFilter && monthFilter.trim() !== '') {
       const [year, month] = monthFilter.split('-');
+      console.log('[QAAgentAudit] Filtering by year:', year, 'month:', month);
       filteredData = auditData.filter(record => {
-        if (!record.audit_datetime) return false;
-        const recordDate = new Date(record.audit_datetime);
+        if (!record.audit_datetime && !record.timestamp) {
+          console.log('[QAAgentAudit] Record missing datetime:', record);
+          return false;
+        }
+        const recordDate = new Date(record.audit_datetime || record.timestamp);
         const recordYear = recordDate.getFullYear();
         const recordMonth = recordDate.getMonth() + 1; // 0-indexed
-        return recordYear === parseInt(year) && recordMonth === parseInt(month);
+        const matches = recordYear === parseInt(year) && recordMonth === parseInt(month);
+        console.log(`[QAAgentAudit] Record date: ${recordDate.toISOString()}, Year: ${recordYear}, Month: ${recordMonth}, Matches: ${matches}`);
+        return matches;
       });
+      console.log('[QAAgentAudit] After month filter:', filteredData.length, 'records');
+    } else {
+      console.log('[QAAgentAudit] No month filter applied, showing all records');
     }
     
     filteredData.forEach(record => {
@@ -260,15 +286,25 @@ const QAAgentAudit = () => {
       }
     });
     
-    return Object.values(grouped);
+    const result = Object.values(grouped);
+    console.log('[QAAgentAudit] Grouped by QA Agent:', result.length, 'QA agents');
+    console.log('[QAAgentAudit] Grouped data:', result);
+    return result;
   }, [auditData, monthFilter]);
 
   // Filter grouped data by search query
   const filteredQAAgents = React.useMemo(() => {
-    if (!searchQuery.trim()) return groupedByQAAgent;
+    console.log('[QAAgentAudit] Filtering QA Agents...');
+    console.log('[QAAgentAudit] Search query:', searchQuery);
+    console.log('[QAAgentAudit] Grouped QA Agents before filter:', groupedByQAAgent.length);
+    
+    if (!searchQuery.trim()) {
+      console.log('[QAAgentAudit] No search query, returning all grouped agents');
+      return groupedByQAAgent;
+    }
     
     const query = searchQuery.toLowerCase();
-    return groupedByQAAgent.filter(qa =>
+    const filtered = groupedByQAAgent.filter(qa =>
       qa.qaAgentName.toLowerCase().includes(query) ||
       qa.records.some(r =>
         (r.agent_name || '').toLowerCase().includes(query) ||
@@ -276,7 +312,21 @@ const QAAgentAudit = () => {
         (r.task_name || '').toLowerCase().includes(query)
       )
     );
+    console.log('[QAAgentAudit] Filtered QA Agents:', filtered.length);
+    return filtered;
   }, [groupedByQAAgent, searchQuery]);
+
+  // Auto-expand all QA agents when data is loaded
+  React.useEffect(() => {
+    if (filteredQAAgents.length > 0) {
+      const allExpanded = {};
+      filteredQAAgents.forEach(qa => {
+        allExpanded[qa.qaAgentName] = true;
+      });
+      setExpandedAgents(allExpanded);
+      console.log('[QAAgentAudit] Auto-expanded all QA agents:', Object.keys(allExpanded));
+    }
+  }, [filteredQAAgents]);
 
   // Toggle QA Agent section
   const toggleAgent = (qaName) => {
@@ -290,7 +340,7 @@ const QAAgentAudit = () => {
   const expandAll = () => {
     const allExpanded = {};
     filteredQAAgents.forEach(qa => {
-      allExpanded[qa.qa_name] = true;
+      allExpanded[qa.qaAgentName] = true;
     });
     setExpandedAgents(allExpanded);
   };
@@ -418,14 +468,10 @@ const QAAgentAudit = () => {
       setError(null);
 
       try {
-        console.log('[QAAgentAudit] Fetching audit data for user:', user?.user_id);
+        console.log('[QAAgentAudit] Fetching all QC audit data...');
 
-        // Call the API endpoint
-        const response = await nodeApi.get('/qc-records/list', {
-          params: {
-            logged_in_user_id: user?.user_id
-          }
-        });
+        // Call the API endpoint - fetch all QC records
+        const response = await nodeApi.get('/qc-records/list');
 
         console.log('[QAAgentAudit] API Response:', response.data);
 
@@ -434,6 +480,7 @@ const QAAgentAudit = () => {
         const mappedData = apiData.map(record => ({
           audit_id: record.id,
           audit_datetime: record.timestamp || record.date_of_file_submission,
+          timestamp: record.timestamp || record.date_of_file_submission, // Keep original field
           qa_agent_name: record.qa_name,
           qa_agent_id: record.qc_user_id,
           agent_name: record.agent_name,
@@ -442,8 +489,13 @@ const QAAgentAudit = () => {
           file_name: record['10%_file_path'] ? record['10%_file_path'].split('/').pop() : (record.file_path ? record.file_path.split('/').pop() : 'N/A'),
           file_url: record['10%_file_path'] || record.file_path || '', // URL for downloading
           total_qc_performed: record['10%_data_generated_count'] || record.file_record_count || 0,
+          '10%_data_generated_count': record['10%_data_generated_count'] || 0, // Keep original field
+          '10%_qc_file_records': record['10%_data_generated_count'] || 0, // Alternative field name
+          qc_score: record.qc_score || 0, // Keep original field
           average_qc_score: record.qc_score || 0,
+          error_score: record.error_score || 0, // Keep original field
           total_errors_found: record.error_score || 0,
+          status: record.status || 'Pending', // Keep original field
           audit_status: record.status || 'Pending',
           comments: '', // Not in API response, can be added later
           file_record_count: record.file_record_count || 0,
@@ -458,6 +510,7 @@ const QAAgentAudit = () => {
 
         setAuditData(mappedData);
         console.log('[QAAgentAudit] Mapped data:', mappedData);
+        console.log('[QAAgentAudit] Total records fetched:', mappedData.length);
 
       } catch (err) {
         console.error('[QAAgentAudit] Error fetching audit data:', err);
@@ -628,6 +681,15 @@ const QAAgentAudit = () => {
 
       {/* Grouped QA Agent Audit Report */}
       <div className="space-y-4">
+        {(() => {
+          console.log('[QAAgentAudit] ========== RENDER CHECK ==========');
+          console.log('[QAAgentAudit] Render - Loading:', loading);
+          console.log('[QAAgentAudit] Render - Error:', error);
+          console.log('[QAAgentAudit] Render - Filtered QA Agents:', filteredQAAgents);
+          console.log('[QAAgentAudit] Render - Filtered QA Agents Length:', filteredQAAgents.length);
+          console.log('[QAAgentAudit] Render - Search Query:', searchQuery);
+          return null;
+        })()}
         {loading ? (
           <div className="bg-white rounded-xl shadow-md border border-blue-100 py-12 text-center">
             <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-200 border-t-blue-600 mb-3"></div>
@@ -652,6 +714,7 @@ const QAAgentAudit = () => {
             const agentFilter = getAgentFilter(qaAgentName);
             const uniqueAgents = getUniqueAgents(records);
             
+            5566gf
             // Calculate statistics for this QA agent
             const totalRecords = records.length;
             const totalQCs = records.reduce((sum, r) => sum + (Number(r.total_qc_performed) || Number(r['10%_qc_file_records']) || Number(r['10%_data_generated_count']) || 0), 0);
