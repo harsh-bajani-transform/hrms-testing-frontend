@@ -12,7 +12,7 @@ import {
 const AgentTabsNavigation = ({ activeTab, setActiveTab }) => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
-    { id: 'billable_report', label: 'Billable Report', icon: Briefcase },
+    { id: 'billable_report', label: 'Billable & QC Report', icon: Briefcase },
     { id: 'adherence', label: 'Reporting Adherence', icon: FileWarning, disabled: true },
     { id: 'incentives', label: 'Agent Incentives', icon: DollarSign, disabled: true }
   ];

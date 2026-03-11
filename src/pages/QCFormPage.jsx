@@ -3,7 +3,7 @@
  * Author: Naitik Maisuriya
  * Description: QC Form page for quality checking with dynamic form fields
  */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
@@ -26,6 +26,7 @@ import {
   Send
 } from 'lucide-react';
 import api from '../services/api';
+import config from '../config/environment';
 import { generateQCSample, saveQCRecord } from '../services/qcService';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorMessage from '../components/common/ErrorMessage';
@@ -57,6 +58,10 @@ const QCFormPage = () => {
   const [afdData, setAfdData] = useState(null); // AFD with categories and subcategories
   const [totalRecords, setTotalRecords] = useState(0); // Total records from API
   const [sampleSize, setSampleSize] = useState(0); // Sample size from API
+  const [tenPercentFilePath, setTenPercentFilePath] = useState(''); // 10% file path from API
+  
+  // Use ref as backup for file path to avoid React state timing issues
+  const tenPercentFilePathRef = useRef('');
   
   // Form state - errors selected for each record
   const [formRows, setFormRows] = useState([]);
@@ -187,18 +192,67 @@ const QCFormPage = () => {
             user.user_id
           );
           
+          // Log full response structure to debug - IMMEDIATELY after receiving
+          console.log('=== SAMPLE GENERATION RESPONSE START ===');
+          console.log('[QCFormPage] Raw API Response Object:', sampleResponse);
+          console.log('[QCFormPage] Response.success:', sampleResponse?.success);
+          console.log('[QCFormPage] Response.data:', sampleResponse?.data);
+          console.log('[QCFormPage] Full API Response (stringified):', JSON.stringify(sampleResponse, null, 2));
+          
+          // Check all possible locations for file path
+          console.log('[QCFormPage] File path location check:', {
+            'sampleResponse.file_path': sampleResponse?.file_path,
+            'sampleResponse["10%_file_path"]': sampleResponse?.['10%_file_path'],
+            'sampleResponse.data.file_path': sampleResponse?.data?.file_path,
+            'sampleResponse.data["10%_file_path"]': sampleResponse?.data?.['10%_file_path'],
+            'sampleResponse.data.sample_file_path': sampleResponse?.data?.sample_file_path,
+            'sampleResponse.data.url': sampleResponse?.data?.url,
+            'sampleResponse.data.fileUrl': sampleResponse?.data?.fileUrl,
+            'sampleResponse.data.file_url': sampleResponse?.data?.file_url
+          });
+          console.log('=== SAMPLE GENERATION RESPONSE END ===');
+          
           if (sampleResponse.success && sampleResponse.data) {
             sampleData = sampleResponse.data.sample_data || [];
             
-            // Extract total_records and sample_size from API response
+            // Extract total_records, sample_size, and file_path from API response
             const apiTotalRecords = sampleResponse.data.total_records || 0;
             const apiSampleSize = sampleResponse.data.sample_size || 0;
             
+            // Try multiple possible locations for the file path
+            let apiFilePath = sampleResponse.data.file_path 
+              || sampleResponse.data['10%_file_path']
+              || sampleResponse.data.sample_file_path
+              || sampleResponse.data.sample_file_url
+              || sampleResponse.data.url
+              || sampleResponse.data.fileUrl
+              || sampleResponse.data.file_url
+              || sampleResponse.file_path 
+              || sampleResponse['10%_file_path']
+              || '';
+            
+            // If no file path from API, construct download URL as fallback
+            if (!apiFilePath && trackerData?.tracker_id) {
+              const backendUrl = config.apiNodeBaseUrl || 'http://localhost:8000/api/v1';
+              apiFilePath = `${backendUrl}/qc-records/download-sample/${trackerData.tracker_id}?logged_in_user_id=${user?.user_id}`;
+              console.log('[QCFormPage] No file path in API response, using download URL as fallback:', apiFilePath);
+            }
+            
             setTotalRecords(apiTotalRecords);
             setSampleSize(apiSampleSize);
+            setTenPercentFilePath(apiFilePath);
+            tenPercentFilePathRef.current = apiFilePath; // Also store in ref
             
-            console.log('[QCFormPage] Sample data generated:', sampleData);
+            console.log('[QCFormPage] ===== STATE VALUES SET =====');
+            console.log('[QCFormPage] Sample data generated, records count:', sampleData.length);
             console.log('[QCFormPage] Total Records:', apiTotalRecords, 'Sample Size:', apiSampleSize);
+            console.log('[QCFormPage] 10% File Path extracted:', apiFilePath);
+            console.log('[QCFormPage] 10% File Path set in state:', apiFilePath);
+            console.log('[QCFormPage] 10% File Path set in ref:', tenPercentFilePathRef.current);
+            console.log('[QCFormPage] 10% File Path length:', apiFilePath?.length || 0);
+            console.log('[QCFormPage] 10% File Path is empty?:', !apiFilePath);
+            console.log('[QCFormPage] Response data keys:', Object.keys(sampleResponse.data || {}));
+            console.log('[QCFormPage] ===== STATE VALUES END =====');
           } else {
             console.warn('[QCFormPage] No sample data returned');
           }
@@ -544,6 +598,19 @@ const QCFormPage = () => {
         is_valid: ass_manager_id !== null && ass_manager_id > 0
       });
 
+      // Log the 10% file path before creating payload
+      console.log('[QCFormPage] ===== PRE-SUBMISSION FILE PATH CHECK =====');
+      console.log('[QCFormPage] Before payload - tenPercentFilePath state:', tenPercentFilePath);
+      console.log('[QCFormPage] Before payload - tenPercentFilePathRef.current:', tenPercentFilePathRef.current);
+      console.log('[QCFormPage] Before payload - tenPercentFilePath type:', typeof tenPercentFilePath);
+      console.log('[QCFormPage] Before payload - tenPercentFilePath is empty?:', !tenPercentFilePath);
+      console.log('[QCFormPage] Before payload - ref is empty?:', !tenPercentFilePathRef.current);
+      
+      // Use ref value as fallback if state is empty (React state timing issue)
+      const filePathToUse = tenPercentFilePath || tenPercentFilePathRef.current || '';
+      console.log('[QCFormPage] File path to use in payload:', filePathToUse);
+      console.log('[QCFormPage] ===== END PRE-SUBMISSION FILE PATH CHECK =====');
+
       // Prepare payload for API - matching database schema exactly
       const payload = {
         // Authentication & Reference
@@ -557,6 +624,7 @@ const QCFormPage = () => {
         project_id: trackerData.project_id,
         task_id: trackerData.task_id,
         file_path: trackerData.tracker_file || trackerData.file_path || '',
+        '10%_file_path': filePathToUse, // 10% sample file path - BACKEND MUST ACCEPT THIS FIELD
         date_of_file_submission: formattedDate,
         qc_score: parseFloat(qcScore.toFixed(2)),
         status: status,
@@ -577,12 +645,14 @@ const QCFormPage = () => {
         agent_user_id: payload.agent_user_id,
         project_id: payload.project_id,
         task_id: payload.task_id,
+        file_path: payload.file_path,
+        '10%_file_path': payload['10%_file_path'],
         date_of_file_submission: payload.date_of_file_submission,
         qc_score: payload.qc_score,
         status: payload.status,
         file_record_count: payload.file_record_count,
         data_generated_count: payload.data_generated_count,
-        qc_file_records: payload.qc_file_records,
+        qc_file_records_count: payload.qc_file_records?.length,
         error_score: payload.error_score,
         error_list_count: payload.error_list.length
       });
@@ -616,9 +686,9 @@ const QCFormPage = () => {
         toast.success(successMessage);
         setShowConfirmModal(false);
         
-        // Navigate back after successful submission
+        // Navigate to QC Form Report after successful submission
         setTimeout(() => {
-          navigate(-1);
+          navigate('/dashboard?tab=agent_file_report&subtab=qc_report');
         }, 500);
       } else {
         throw new Error(response.message || 'Failed to save QC record');
@@ -646,7 +716,7 @@ const QCFormPage = () => {
   // Handle file download
   const handleDownload = () => {
     if (trackerData?.tracker_id) {
-      const backendUrl = import.meta.env.VITE_API_NODE_BASE_URL || 'http://localhost:8000/api/v1';
+      const backendUrl = config.apiNodeBaseUrl || 'http://localhost:8000/api/v1';
       // Strip /v1 if present to form route, though typically routes start without /v1 here if backend is set up directly. 
       // Checking the qcService.js, it uses nodeApi.post("/qc-records/generate-sample").
       // nodeApi probably configures baseURL as VITE_API_NODE_BASE_URL.

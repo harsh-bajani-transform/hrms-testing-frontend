@@ -1122,16 +1122,16 @@ const Tracker = ({ embedded = false }) => {
 
                 <button
                   onClick={() => {
-                    // if (isSubmissionWindowOpen) {
+                    if (isSubmissionWindowOpen) {
                       setShowModal(true);
-                    // } else {
-                      // toast.error(`Tracker submissions are only allowed in the first 15 minutes of each hour. Next window opens at ${nextWindowTime}`, {
-                        // duration: 5000,
-                        // icon: '⏰'
-                      // });
-                    // }
+                    } else {
+                      toast.error(`Tracker submissions are only allowed in the first 15 minutes of each hour. Next window opens at ${nextWindowTime}`, {
+                        duration: 5000,
+                        icon: '⏰'
+                      });
+                    }
                   }}
-                  // disabled={!isSubmissionWindowOpen}
+                  disabled={!isSubmissionWindowOpen}
                   className={`inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transition-all duration-200 ${
                     isSubmissionWindowOpen
                       ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white transform hover:scale-105 cursor-pointer'

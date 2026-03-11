@@ -57,26 +57,51 @@ const TasksModal = ({
 
   useEffect(() => {
     const loadAgents = async () => {
+      // Get user_id from context or fallback to sessionStorage
+      let userId = user?.user_id;
+      
+      if (!userId) {
+        try {
+          const storedUser = sessionStorage.getItem('user');
+          if (storedUser) {
+            const parsed = JSON.parse(storedUser);
+            userId = parsed?.user_id || parsed?.id;
+          }
+        } catch (e) {
+          console.error('[TasksModal] Failed to parse user from sessionStorage:', e);
+        }
+      }
+      
+      console.log('[TasksModal] Loading agents with userId:', userId, 'projectId:', project?.id);
+      
+      // Don't proceed if we don't have required data
+      if (!userId || !project?.id) {
+        console.warn('[TasksModal] Missing required data - userId:', userId, 'projectId:', project?.id);
+        setAgents([]);
+        return;
+      }
+      
       setAgentsLoading(true);
       setAgentsError('');
       try {
-        const data = await fetchDropdown('agent', project?.id);
+        const data = await fetchDropdown('agent', userId, project?.id);
         const normalized = (data || []).map((item) => {
           const candidate = Array.isArray(item) ? item[0] : item;
           const id = candidate?.user_id || candidate?.team_id || candidate?.id;
           const label = candidate?.label || candidate?.name || candidate?.user_name || candidate?.team_name || '';
           return id ? { id: String(id), label } : null;
         }).filter(Boolean);
+        console.log('[TasksModal] Agents loaded:', normalized.length);
         setAgents(normalized);
       } catch (error) {
-        console.error('Failed to fetch agents:', error);
+        console.error('[TasksModal] Failed to fetch agents:', error);
         setAgentsError('Unable to load agents');
       } finally {
         setAgentsLoading(false);
       }
     };
     loadAgents();
-  }, [project?.id]);
+  }, [project?.id, user?.user_id]);
 
   const handleTeamChange = (newTeamIds) => {
     setFormData((prev) => ({ ...prev, teamIds: newTeamIds }));

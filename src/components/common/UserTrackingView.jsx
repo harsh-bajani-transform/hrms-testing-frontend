@@ -222,35 +222,31 @@ const UserTrackingView = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100">
+      <div className="flex items-center justify-center min-h-screen bg-white">
         <LoadingSpinner />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-white py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Header Section with Gradient */}
-        <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 rounded-2xl shadow-2xl">
-          <div className="absolute inset-0 bg-black opacity-5"></div>
-          <div className="absolute -right-20 -top-20 w-64 h-64 bg-white opacity-5 rounded-full"></div>
-          <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-white opacity-5 rounded-full"></div>
-          
-          <div className="relative px-8 py-10">
-            <div className="flex items-center gap-4 mb-2">
-              <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-white/30">
-                <Shield className="w-7 h-7 text-white" />
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-white/20 rounded-lg backdrop-blur-sm">
+                <Shield className="w-8 h-8" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-white tracking-tight cursor-default">
-                  User Permissions Manager
-                </h1>
-                <p className="text-blue-100 text-sm font-medium mt-1 cursor-default">
-                  Control and monitor user access rights across the platform
-                </p>
+                <h2 className="text-2xl font-bold">User Permissions Manager</h2>
+                <p className="text-blue-100 text-sm mt-1">Control and monitor user access rights across the platform</p>
               </div>
+            </div>
+            <div className="hidden md:flex items-center gap-2 bg-white/10 px-4 py-2 rounded-lg backdrop-blur-sm">
+              <Shield className="w-5 h-5" />
+              <span className="font-semibold">{stats.totalUsers} Users</span>
             </div>
           </div>
         </div>

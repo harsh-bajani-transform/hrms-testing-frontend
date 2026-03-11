@@ -16,12 +16,29 @@ export const useUserDropdowns = () => {
      const [loading, setLoading] = useState(false);
      const [error, setError] = useState(null);
 
-     const loadDropdowns = useCallback(async () => {
+     const loadDropdowns = useCallback(async (userId = null) => {
           setLoading(true);
           setError(null);
 
           try {
-               const data = await fetchUserDropdowns();
+               // Get user_id from parameter or fallback to sessionStorage
+               let finalUserId = userId;
+               
+               if (!finalUserId) {
+                    try {
+                         const storedUser = sessionStorage.getItem('user');
+                         if (storedUser) {
+                              const parsed = JSON.parse(storedUser);
+                              finalUserId = parsed?.user_id || parsed?.id;
+                         }
+                    } catch (e) {
+                         console.error('[useUserDropdowns] Failed to parse user from sessionStorage:', e);
+                    }
+               }
+               
+               console.log('[useUserDropdowns] Loading dropdowns with userId:', finalUserId);
+               
+               const data = await fetchUserDropdowns(finalUserId);
 
                console.log('[useUserDropdowns] Raw data received:', data);
                console.log('[useUserDropdowns] projectManagers:', data.projectManagers);

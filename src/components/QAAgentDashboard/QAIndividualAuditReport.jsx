@@ -7,21 +7,18 @@ import React, { useState, useEffect } from 'react';
 import { 
   FileCheck,
   Download,
+  ExternalLink,
   Search,
   Users,
   Award,
-  FileText,
-  Calendar as CalendarIcon,
-  ChevronLeft,
-  ChevronRight,
   RotateCcw
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
+import api from '../../services/api';
+import { getFriendlyErrorMessage } from '../../utils/errorMessages';
 import ErrorMessage from '../common/ErrorMessage';
 import { DateRangePicker } from '../common/CustomCalendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
 
 const QAIndividualAuditReport = () => {
   const { user } = useAuth();
@@ -64,39 +61,28 @@ const QAIndividualAuditReport = () => {
       const formattedTime = `${hours}:${minutes} ${ampm}`;
       
       return { date: formattedDate, time: formattedTime };
-    } catch (_error) {
+    } catch (e) {
+      console.error('[QAIndividualAuditReport] Error formatting date:', e);
       return { date: dateTimeString, time: '' };
     }
   };
 
-  // Helper function to handle file download
-  const handleFileDownload = (fileName, _fileUrl) => {
-    if (!fileName) {
-      toast.error('No file available for download');
-      return;
-    }
-    
-    // TODO: Replace with actual file download logic when API is ready
-    toast.success(`Downloading ${fileName}...`);
-  };
-
-  // Helper function to get current month in MonthYearPicker format
-  const getCurrentMonth = () => {
-    const now = new Date();
-    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    return `${monthNames[now.getMonth()]}${now.getFullYear()}`;
+  // Helper function to get today's date in YYYY-MM-DD format
+  const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   // State management
-  const [monthFilter, setMonthFilter] = useState(() => getCurrentMonth());
   const [auditData, setAuditData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [showMonthPicker, setShowMonthPicker] = useState(false);
-  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
+  const [startDate, setStartDate] = useState(() => getTodayDate());
+  const [endDate, setEndDate] = useState(() => getTodayDate());
 
   // Get unique agent names from records
   const uniqueAgents = React.useMemo(() => {
@@ -121,38 +107,38 @@ const QAIndividualAuditReport = () => {
       );
     }
 
-    // Date range filter
-    if (startDate) {
+    // Date range filter with proper time handling
+    if (startDate || endDate) {
       filtered = filtered.filter(record => {
-        const recordDate = new Date(record.date_time);
-        return recordDate >= new Date(startDate);
-      });
-    }
-
-    if (endDate) {
-      filtered = filtered.filter(record => {
-        const recordDate = new Date(record.date_time);
-        return recordDate <= new Date(endDate);
+        if (!record.audit_datetime) return false;
+        
+        const recordDate = new Date(record.audit_datetime);
+        recordDate.setHours(0, 0, 0, 0);
+        
+        if (startDate) {
+          const start = new Date(startDate);
+          start.setHours(0, 0, 0, 0);
+          if (recordDate < start) return false;
+        }
+        
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          if (recordDate > end) return false;
+        }
+        
+        return true;
       });
     }
 
     return filtered;
   }, [auditData, searchQuery, startDate, endDate]);
 
-  // Clear all filters including month
+  // Clear all filters
   const resetAllFilters = () => {
     setSearchQuery('');
-    setStartDate('');
-    setEndDate('');
-    setMonthFilter(getCurrentMonth());
-  };
-
-  // Handle month selection
-  const handleMonthSelect = (month, year) => {
-    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    const monthYear = `${monthNames[month]}${year}`;
-    setMonthFilter(monthYear);
-    setShowMonthPicker(false);
+    setStartDate(getTodayDate());
+    setEndDate(getTodayDate());
   };
 
   // Fetch audit data
@@ -162,71 +148,51 @@ const QAIndividualAuditReport = () => {
         setLoading(true);
         setError(null);
 
-        // TODO: Replace with actual API call to fetch individual QA agent audit data
-        // The API should filter by logged-in user (QA agent)
-        
-        // Mock data for now
-        const mockData = [
-          {
-            audit_id: 1,
-            agent_name: 'John Doe',
-            project_name: 'Project Alpha',
-            task_name: 'Data Entry',
-            date_time: '2026-03-08T10:30:00',
-            total_qcs: 10,
-            avg_qc_score: 95,
-            total_errors: 2,
-            file_name: 'report_2026_03_08.xlsx',
-            file_url: '#',
-            error_notes: 'Minor formatting issues',
-            status: 'Approved',
-            comments: 'Good work overall'
-          },
-          {
-            audit_id: 2,
-            agent_name: 'Jane Smith',
-            project_name: 'Project Beta',
-            task_name: 'Quality Check',
-            date_time: '2026-03-07T14:15:00',
-            total_qcs: 15,
-            avg_qc_score: 88,
-            total_errors: 5,
-            file_name: 'qc_report_2026_03_07.xlsx',
-            file_url: '#',
-            error_notes: 'Some data validation errors',
-            status: 'Pending',
-            comments: 'Needs review'
-          },
-          {
-            audit_id: 3,
-            agent_name: 'John Doe',
-            project_name: 'Project Gamma',
-            task_name: 'Audit Review',
-            date_time: '2026-03-06T09:00:00',
-            total_qcs: 8,
-            avg_qc_score: 78,
-            total_errors: 12,
-            file_name: 'audit_2026_03_06.xlsx',
-            file_url: '#',
-            error_notes: 'Multiple errors found',
-            status: 'Rejected',
-            comments: 'Requires improvement'
-          }
-        ];
+        console.log('[QAIndividualAuditReport] Fetching QC audit report...');
 
-        setAuditData(mockData);
-        toast.success('Audit data loaded successfully');
+        // Call Python backend API
+        const response = await api.post('/qc_audit/report');
+
+        console.log('[QAIndividualAuditReport] API Response:', response.data);
+
+        // Extract records from response
+        const records = response.data?.data?.records || [];
+
+        // Map API response to component format
+        const mappedData = records.map((record, index) => ({
+          audit_id: index + 1,
+          audit_datetime: record.audit_datetime,
+          agent_name: record.agent_name,
+          project_name: record.project,
+          task_name: record.task,
+          total_qcs: record.total_qcs,
+          avg_qc_score: parseFloat(record.avg_qc_score) || 0,
+          qc_checked_file: record.qc_checked_file,
+          status: record.status,
+          error_notes: record.error_notes
+        }));
+
+        setAuditData(mappedData);
+        console.log('[QAIndividualAuditReport] Mapped data:', mappedData);
+        console.log('[QAIndividualAuditReport] Total records:', mappedData.length);
+
+        if (mappedData.length > 0) {
+          toast.success(`Loaded ${mappedData.length} audit record${mappedData.length !== 1 ? 's' : ''}`);
+        }
       } catch (err) {
         console.error('[QAIndividualAuditReport] Error fetching audit data:', err);
-        setError('Failed to load audit data. Please try again.');
-        toast.error('Failed to load audit data');
+        const msg = getFriendlyErrorMessage(err);
+        setError(msg);
+        toast.error(msg);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchAuditData();
-  }, [monthFilter, user]);
+    if (user?.user_id) {
+      fetchAuditData();
+    }
+  }, [user]);
 
   return (
     <div className="space-y-6">
@@ -246,103 +212,7 @@ const QAIndividualAuditReport = () => {
       {/* Filters Section */}
       <div className="bg-white rounded-xl shadow-md border-2 border-blue-100 p-6">
         {/* All Filters in One Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 mb-4">
-          {/* Month Filter */}
-          <div className="lg:max-w-[220px]">
-            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-2">
-              Month Filter
-            </label>
-            <Popover open={showMonthPicker} onOpenChange={setShowMonthPicker}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className={cn(
-                    "w-full bg-slate-50 border-2 border-blue-200 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-blue-50 hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-left flex items-center justify-between"
-                  )}
-                >
-                  <span className="flex items-center gap-2">
-                    <CalendarIcon className="w-4 h-4 text-blue-600" />
-                    {monthFilter || 'Select Month/Year'}
-                  </span>
-                  <ChevronRight className={cn("w-4 h-4 transition-transform", showMonthPicker && "rotate-90")} />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[340px] border-2 border-blue-200 bg-white" align="start">
-                {/* Year Navigation */}
-                <div className="flex items-center justify-between mb-4 pb-3 border-b-2 border-blue-100 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setCalendarYear(calendarYear - 1)}
-                    className="p-2 hover:bg-blue-50 rounded-lg transition-colors shrink-0"
-                    title="Previous Year"
-                  >
-                    <ChevronLeft className="w-5 h-5 text-blue-600" />
-                  </button>
-                  
-                  <select
-                    value={calendarYear}
-                    onChange={(e) => setCalendarYear(parseInt(e.target.value))}
-                    className="flex-1 px-3 py-1.5 text-base font-bold text-slate-800 bg-slate-50 border-2 border-blue-200 rounded-lg hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors cursor-pointer text-center"
-                  >
-                    {Array.from({ length: 21 }, (_, i) => new Date().getFullYear() - 10 + i).map((y) => (
-                      <option key={y} value={y} disabled={y > new Date().getFullYear()}>
-                        {y}
-                      </option>
-                    ))}
-                  </select>
-                  
-                  <button
-                    type="button"
-                    onClick={() => setCalendarYear(calendarYear + 1)}
-                    disabled={calendarYear >= new Date().getFullYear()}
-                    className={cn(
-                      "p-2 rounded-lg transition-colors shrink-0",
-                      calendarYear >= new Date().getFullYear()
-                        ? "opacity-50 cursor-not-allowed bg-slate-100"
-                        : "hover:bg-blue-50"
-                    )}
-                    title={calendarYear >= new Date().getFullYear() ? "Cannot select future dates" : "Next Year"}
-                  >
-                    <ChevronRight className="w-5 h-5 text-blue-600" />
-                  </button>
-                </div>
-
-                {/* Months Grid */}
-                <div className="grid grid-cols-3 gap-2">
-                  {['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'].map((month, index) => {
-                    const monthYear = `${month}${calendarYear}`;
-                    const isSelected = monthFilter === monthYear;
-                    const now = new Date();
-                    const currentMonthYear = `${['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][now.getMonth()]}${now.getFullYear()}`;
-                    const isCurrentMonth = monthYear === currentMonthYear;
-                    const isFutureMonth = calendarYear > now.getFullYear() || (calendarYear === now.getFullYear() && index > now.getMonth());
-                    
-                    return (
-                      <button
-                        key={month}
-                        type="button"
-                        onClick={() => !isFutureMonth && handleMonthSelect(index, calendarYear)}
-                        disabled={isFutureMonth}
-                        className={cn(
-                          "px-3 py-2 rounded-lg text-sm font-medium transition-all",
-                          isFutureMonth
-                            ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                            : isSelected 
-                              ? 'bg-blue-600 text-white shadow-md' 
-                              : isCurrentMonth
-                                ? 'bg-blue-100 text-blue-700 border-2 border-blue-300 hover:bg-blue-200'
-                                : 'bg-blue-50 text-slate-700 hover:bg-blue-100 border-2 border-blue-200'
-                        )}
-                      >
-                        {month}
-                      </button>
-                    );
-                  })}
-                </div>
-              </PopoverContent>
-            </Popover>
-          </div>
-
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4">
           {/* Search Filter */}
           <div className="lg:col-span-2">
             <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-2">
@@ -419,17 +289,15 @@ const QAIndividualAuditReport = () => {
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Project</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Task</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Total QCs</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Avg QC Score</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Total Errors</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">QC Score</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">QC Checked File</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Error Notes</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Comments</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {filteredRecords.map((record, index) => {
-                  const { date, time } = formatDateTime(record.date_time);
+                  const { date, time } = formatDateTime(record.audit_datetime);
                   return (
                     <tr key={record.audit_id || index} className="hover:bg-blue-50 transition-colors">
                       <td className="px-4 py-3">
@@ -456,17 +324,18 @@ const QAIndividualAuditReport = () => {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="text-sm font-bold text-red-700">{record.total_errors || '-'}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {record.file_name ? (
-                          <button
-                            onClick={() => handleFileDownload(record.file_name, record.file_url)}
-                            className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 text-sm font-semibold transition-colors"
+                        {record.qc_checked_file && record.qc_checked_file !== '-' ? (
+                          <a 
+                            href={record.qc_checked_file}
+                            download=""
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 text-sm font-bold transition-colors group/link"
                           >
-                            <Download className="w-4 h-4" />
+                            <Download className="w-4 h-4 group-hover/link:animate-bounce" />
                             Download
-                          </button>
+                            <ExternalLink className="w-3 h-3 opacity-50" />
+                          </a>
                         ) : (
                           <span className="text-slate-400 text-sm">-</span>
                         )}
@@ -478,9 +347,6 @@ const QAIndividualAuditReport = () => {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm text-slate-600">{record.error_notes || '-'}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-slate-600">{record.comments || '-'}</span>
                       </td>
                     </tr>
                   );
@@ -495,7 +361,7 @@ const QAIndividualAuditReport = () => {
       {!loading && !error && filteredRecords.length > 0 && (
         <div className="bg-white rounded-xl shadow-md border border-blue-100 p-6">
           <h3 className="text-lg font-bold text-slate-800 mb-4">Summary</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -517,20 +383,6 @@ const QAIndividualAuditReport = () => {
                   <p className="text-xs font-bold text-slate-600 uppercase">Average Score</p>
                   <p className="text-2xl font-bold text-slate-800">
                     {(filteredRecords.reduce((sum, r) => sum + (r.avg_qc_score || 0), 0) / filteredRecords.length).toFixed(1)}%
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-yellow-50 to-amber-50 rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-yellow-600" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-600 uppercase">Pending</p>
-                  <p className="text-2xl font-bold text-slate-800">
-                    {filteredRecords.filter(r => r.status?.toLowerCase() === 'pending').length}
                   </p>
                 </div>
               </div>

@@ -32,11 +32,14 @@ const ProjectCategory = () => {
         dropdown_type: 'afd'
       });
 
+      console.log('AFD API Response:', response.data);
+
       if (response.data.status === 200) {
         const options = response.data.data.map(afd => ({
           value: afd.afd_id,
           label: afd.label
         }));
+        console.log('AFD Options:', options);
         setAfdOptions(options);
       }
     } catch (error) {
@@ -51,7 +54,10 @@ const ProjectCategory = () => {
       setLoading(true);
       const response = await api.post('/project_category/list', {});
 
+      console.log('Categories API Response:', response.data);
+
       if (response.data.status === 200) {
+        console.log('Categories Data:', response.data.data);
         setCategories(response.data.data || []);
       }
     } catch (error) {
@@ -113,7 +119,7 @@ const ProjectCategory = () => {
     setEditingId(category.project_category_id);
     setFormData({
       name: category.project_category_name,
-      afdId: category.afd_id
+      afdId: category.afd?.[0]?.afd_id || ''
     });
     setFormErrors({});
   };
@@ -185,10 +191,14 @@ const ProjectCategory = () => {
     cat.project_category_name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Get AFD label by ID
-  const getAfdLabel = (afdId) => {
-    const afd = afdOptions.find(opt => opt.value === afdId);
-    return afd?.label || 'N/A';
+  // Get AFD name from category object
+  const getAfdLabel = (category) => {
+    // The AFD name is directly in the category response
+    const afdName = category.afd?.[0]?.afd_name;
+    console.log('Getting AFD name for category:', category.project_category_name);
+    console.log('AFD data:', category.afd);
+    console.log('AFD name:', afdName);
+    return afdName || 'N/A';
   };
 
   if (loading) {
@@ -364,7 +374,7 @@ const ProjectCategory = () => {
                     ) : (
                       <div className="flex items-center gap-2">
                         <FileText className="w-4 h-4 text-blue-600" />
-                        <span className="text-sm text-slate-700 font-medium">{getAfdLabel(category.afd_id)}</span>
+                        <span className="text-sm text-slate-700 font-medium">{getAfdLabel(category)}</span>
                       </div>
                     )}
                   </td>

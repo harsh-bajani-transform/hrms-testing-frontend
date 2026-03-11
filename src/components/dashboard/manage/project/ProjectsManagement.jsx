@@ -118,7 +118,7 @@ const ProjectsManagement = ({
     console.log('[ProjectsManagement] Opening edit for project:', project);
     console.log('[ProjectsManagement] Current dropdowns before loading:', dropdowns);
     
-    await loadDropdowns();
+    await loadDropdowns(user?.user_id);
     
     console.log('[ProjectsManagement] Dropdowns after loading:', dropdowns);
     console.log('[ProjectsManagement] Dropdowns.projectManagers:', dropdowns.projectManagers);

@@ -4,26 +4,23 @@
  * Description: QC Report component for Agent Dashboard
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
-// import axios from 'axios'; // TODO: Uncomment when API is ready
+import nodeApi from '../../services/nodeApi';
 import * as XLSX from 'xlsx';
 import { 
   Download, 
   FileSpreadsheet, 
-  Calendar as CalendarIcon, 
-  ChevronDown,
   RotateCcw,
   Award,
   CheckCircle2,
   AlertCircle,
-  XCircle
+  X
 } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { cn } from '../../lib/utils';
 import { getFriendlyErrorMessage } from '../../utils/errorMessages';
 import ErrorMessage from '../common/ErrorMessage';
+import { DateRangePicker } from '../common/CustomCalendar';
 
 const AgentQCReport = () => {
   const { user } = useAuth();
@@ -47,105 +44,100 @@ const AgentQCReport = () => {
     return 'bg-slate-100 text-slate-700';
   };
 
-  // Simple MonthPicker component
-  const MonthPicker = ({ value, onChange }) => {
-    const [showPicker, setShowPicker] = useState(false);
-    const [viewYear, setViewYear] = useState(() => {
-      if (value) {
-        return parseInt(value.split('-')[0]);
-      }
-      return new Date().getFullYear();
-    });
-
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-    const handleMonthSelect = (monthIndex) => {
-      const monthStr = String(monthIndex + 1).padStart(2, '0');
-      const dateStr = `${viewYear}-${monthStr}`;
-      onChange(dateStr);
-      setShowPicker(false);
-    };
-
-    const selectedMonth = value ? parseInt(value.split('-')[1]) - 1 : -1;
-    const selectedYear = value ? parseInt(value.split('-')[0]) : -1;
-
-    const displayValue = value ? (() => {
-      const [year, month] = value.split('-');
-      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-      return `${monthNames[parseInt(month) - 1]} ${year}`;
-    })() : 'Select Month';
-
-    return (
-      <div>
-        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-2">
-          <CalendarIcon className="w-3.5 h-3.5 text-blue-600" />
-          Month
-        </label>
-        <Popover open={showPicker} onOpenChange={setShowPicker}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="w-full bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-800 hover:bg-blue-50 hover:border-blue-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-left flex items-center justify-between"
-            >
-              <span>{displayValue}</span>
-              <ChevronDown className="w-4 h-4 text-blue-600" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[280px] border-2 border-blue-200 bg-white p-4" align="start">
-            <div className="flex items-center justify-between mb-4">
-              <button
-                type="button"
-                onClick={() => setViewYear(y => y - 1)}
-                className="p-1.5 hover:bg-slate-100 rounded transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-              </button>
-              <span className="font-bold text-sm text-slate-800">{viewYear}</span>
-              <button
-                type="button"
-                onClick={() => setViewYear(y => y + 1)}
-                className="p-1.5 hover:bg-slate-100 rounded transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-              </button>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {monthNames.map((month, index) => {
-                const isSelected = selectedYear === viewYear && selectedMonth === index;
-                return (
-                  <button
-                    key={month}
-                    type="button"
-                    onClick={() => handleMonthSelect(index)}
-                    className={cn(
-                      "text-sm p-2.5 rounded-lg transition-colors font-medium",
-                      isSelected
-                        ? "bg-blue-600 text-white font-bold"
-                        : "text-slate-700 hover:bg-blue-100"
-                    )}
-                  >
-                    {month}
-                  </button>
-                );
-              })}
-            </div>
-          </PopoverContent>
-        </Popover>
-      </div>
-    );
+  // Helper function to get today's date in YYYY-MM-DD format
+  const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
-  // Helper function to get current month
-  const getCurrentMonth = () => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  // Helper function to format date and time
+  const formatDateTime = (timestamp) => {
+    if (!timestamp) return { date: '-', time: '-' };
+    
+    try {
+      const date = new Date(timestamp);
+      
+      // Format date as: 10/Mar/2026
+      const day = String(date.getDate()).padStart(2, '0');
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const month = monthNames[date.getMonth()];
+      const year = date.getFullYear();
+      const formattedDate = `${day}/${month}/${year}`;
+      
+      // Format time as: 12:00 AM
+      let hours = date.getHours();
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12; // the hour '0' should be '12'
+      const formattedTime = `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+      
+      return { date: formattedDate, time: formattedTime };
+    } catch (e) {
+      console.error('[AgentQCReport] Error formatting date:', e);
+      return { date: '-', time: '-' };
+    }
+  };
+
+  // Handle Error List Modal
+  const handleOpenErrorListModal = (errorList, recordInfo) => {
+    // Ensure errorList is always an array
+    let parsedErrorList = [];
+    
+    try {
+      if (typeof errorList === 'string') {
+        parsedErrorList = JSON.parse(errorList);
+      } else if (Array.isArray(errorList)) {
+        parsedErrorList = errorList;
+      }
+    } catch (e) {
+      console.error('[AgentQCReport] Error parsing error list:', e);
+      parsedErrorList = [];
+    }
+    
+    setSelectedErrorList(parsedErrorList);
+    setSelectedRecordInfo(recordInfo);
+    setShowErrorListModal(true);
+  };
+
+  const handleCloseErrorListModal = () => {
+    setShowErrorListModal(false);
+    setSelectedErrorList([]);
+    setSelectedRecordInfo(null);
   };
 
   // State management
-  const [monthFilter, setMonthFilter] = useState(() => getCurrentMonth());
-  const [qcData, setQcData] = useState([]);
+  const [startDate, setStartDate] = useState(() => getTodayDate());
+  const [endDate, setEndDate] = useState(() => getTodayDate());
+  const [allQcData, setAllQcData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showErrorListModal, setShowErrorListModal] = useState(false);
+  const [selectedErrorList, setSelectedErrorList] = useState([]);
+  const [selectedRecordInfo, setSelectedRecordInfo] = useState(null);
+
+  // Filter data by date range on frontend
+  const qcData = useMemo(() => {
+    if (!startDate || !endDate) return allQcData;
+
+    return allQcData.filter(record => {
+      if (!record.evaluation_datetime) return false;
+
+      const recordDate = new Date(record.evaluation_datetime);
+      recordDate.setHours(0, 0, 0, 0);
+
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+
+      return recordDate >= start && recordDate <= end;
+    });
+  }, [allQcData, startDate, endDate]);
 
   // Fetch QC report data
   useEffect(() => {
@@ -154,61 +146,34 @@ const AgentQCReport = () => {
       setError(null);
 
       try {
-        // TODO: Replace with actual API endpoint when backend is ready
-        const payload = {
-          logged_in_user_id: user?.user_id,
-          month_year: monthFilter
-        };
+        console.log('[AgentQCReport] Fetching QC data for user:', user?.user_id);
 
-        console.log('[AgentQCReport] Fetching QC data:', payload);
-
-        // Placeholder API call - replace with actual endpoint
-        // const response = await axios.post('/python/qc/report', payload);
-        
-        // Mock data for now
-        const mockData = [
-          {
-            qc_id: 1,
-            evaluation_datetime: '2024-03-01 10:30:25',
-            qa_agent: 'John QA',
-            project_task: 'Project Alpha / Data Entry',
-            file_name: 'data_batch_001.xlsx',
-            total_records: 100,
-            error_count: 2,
-            error_list: 'Spelling errors (2)',
-            status: 'Regular',
-            qc_score: 98.5
-          },
-          {
-            qc_id: 2,
-            evaluation_datetime: '2024-03-02 14:15:10',
-            qa_agent: 'Jane QA',
-            project_task: 'Project Beta / Data Validation',
-            file_name: 'validation_002.xlsx',
-            total_records: 100,
-            error_count: 8,
-            error_list: 'Format issues (5), Missing data (3)',
-            status: 'Rework',
-            qc_score: 92.0
-          },
-          {
-            qc_id: 3,
-            evaluation_datetime: '2024-03-03 09:45:00',
-            qa_agent: 'Mike QA',
-            project_task: 'Project Gamma / Data Processing',
-            file_name: 'process_003.xlsx',
-            total_records: 100,
-            error_count: 24,
-            error_list: 'Validation errors (15), Logic errors (9)',
-            status: 'Correction',
-            qc_score: 75.5
+        // Call Node API to get ALL QC records (no date filtering on API)
+        const response = await nodeApi.get('/qc-records/list', {
+          params: {
+            agent_user_id: user?.user_id
           }
-        ];
+        });
 
-        setQcData(mockData);
-        
-        // When API is ready, use:
-        // setQcData(response.data?.data || []);
+        console.log('[AgentQCReport] API Response:', response.data);
+
+        // Map API response to component format
+        const records = response.data?.data || [];
+        const mappedData = records.map(record => {
+          return {
+            qc_id: record.id,
+            evaluation_datetime: record.timestamp,
+            qa_agent: record.qa_name || '-',
+            project_task: `${record.project_name || '-'} / ${record.task_name || '-'}`,
+            file_name: record.file_path,
+            total_records: record.file_record_count,
+            error_list: record.error_list,
+            status: record.status,
+            qc_score: record.qc_score
+          };
+        });
+
+        setAllQcData(mappedData);
 
       } catch (err) {
         console.error('[AgentQCReport] Error fetching QC data:', err);
@@ -223,7 +188,8 @@ const AgentQCReport = () => {
     if (user?.user_id) {
       fetchQCData();
     }
-  }, [monthFilter, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // Export to Excel
   const handleExportExcel = () => {
@@ -237,9 +203,8 @@ const AgentQCReport = () => {
         'Evaluation Date & Time': row.evaluation_datetime || '-',
         'QA Agent': row.qa_agent || '-',
         'Project/Task': row.project_task || '-',
-        'File': row.file_name || '-',
+        'File': row.file_name && row.file_name !== '-' ? 'Yes' : 'No',
         'Total Records': row.total_records || 0,
-        'Errors': row.error_count || 0,
         'Error List': row.error_list || '-',
         'Status': row.status || '-',
         'QC Score': row.qc_score != null ? `${row.qc_score}%` : '-'
@@ -247,15 +212,13 @@ const AgentQCReport = () => {
 
       // Calculate summary
       const avgScore = qcData.reduce((sum, r) => sum + (Number(r.qc_score) || 0), 0) / qcData.length;
-      const totalErrors = qcData.reduce((sum, r) => sum + (Number(r.error_count) || 0), 0);
 
       exportData.push({
         'Evaluation Date & Time': 'SUMMARY',
         'QA Agent': '',
         'Project/Task': '',
-        'File': '',
+        'File': '-',
         'Total Records': qcData.reduce((sum, r) => sum + (Number(r.total_records) || 0), 0),
-        'Errors': totalErrors,
         'Error List': '',
         'Status': '',
         'QC Score': `${avgScore.toFixed(2)}%`
@@ -266,9 +229,8 @@ const AgentQCReport = () => {
         { wch: 20 },  // Evaluation Date & Time
         { wch: 15 },  // QA Agent
         { wch: 30 },  // Project/Task
-        { wch: 25 },  // File
+        { wch: 10 },  // File (Yes/No)
         { wch: 14 },  // Total Records
-        { wch: 10 },  // Errors
         { wch: 35 },  // Error List
         { wch: 12 },  // Status
         { wch: 12 }   // QC Score
@@ -276,7 +238,7 @@ const AgentQCReport = () => {
 
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'QC Report');
-      const filename = `QC_Report_${monthFilter}.xlsx`;
+      const filename = `QC_Report_${startDate}_to_${endDate}.xlsx`;
       XLSX.writeFile(workbook, filename);
       toast.success('QC report exported!');
     } catch (err) {
@@ -289,76 +251,38 @@ const AgentQCReport = () => {
     <div className="max-w-7xl mx-auto py-6 px-2 sm:px-4">
       {/* Filter Section */}
       <div className="bg-white rounded-xl shadow-md border border-blue-100 p-6 mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-end gap-4">
-          {/* Month Filter */}
-          <div className="flex-1 sm:flex-none sm:w-64">
-            <MonthPicker
-              value={monthFilter}
-              onChange={setMonthFilter}
-            />
-          </div>
+        <DateRangePicker
+          startDate={startDate}
+          endDate={endDate}
+          onStartDateChange={setStartDate}
+          onEndDateChange={setEndDate}
+          label="Evaluation Date Range"
+          description="Filter QC reports by evaluation date"
+          showClearButton={false}
+        />
+        
+        {/* Action Buttons */}
+        <div className="flex items-center justify-end gap-3 mt-4">
+          <button
+            className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-sm hover:shadow-md transition-all duration-200 group"
+            onClick={() => {
+              setStartDate(getTodayDate());
+              setEndDate(getTodayDate());
+            }}
+            type="button"
+          >
+            <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" />
+            Reset
+          </button>
           
-          {/* Action Buttons */}
-          <div className="flex items-end gap-3">
-            <button
-              className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-sm hover:shadow-md transition-all duration-200 group"
-              onClick={() => setMonthFilter(getCurrentMonth())}
-              type="button"
-            >
-              <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" />
-              Reset Filters
-            </button>
-            
-            <button
-              onClick={handleExportExcel}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        {/* Average QC Score Card */}
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl shadow-md border border-blue-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-blue-700 mb-1">Average QC Score</p>
-              <p className="text-3xl font-bold text-blue-900">
-                {qcData.length > 0 
-                  ? `${(qcData.reduce((sum, r) => sum + (Number(r.qc_score) || 0), 0) / qcData.length).toFixed(2)}%`
-                  : '-'}
-              </p>
-            </div>
-            <Award className="w-12 h-12 text-blue-600 opacity-50" />
-          </div>
-        </div>
-
-        {/* Total Submissions Card */}
-        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl shadow-md border border-green-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-green-700 mb-1">Total Submissions</p>
-              <p className="text-3xl font-bold text-green-900">{qcData.length}</p>
-            </div>
-            <FileSpreadsheet className="w-12 h-12 text-green-600 opacity-50" />
-          </div>
-        </div>
-
-        {/* Total Errors Card */}
-        <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl shadow-md border border-red-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-red-700 mb-1">Total Errors</p>
-              <p className="text-3xl font-bold text-red-900">
-                {qcData.reduce((sum, r) => sum + (Number(r.error_count) || 0), 0)}
-              </p>
-            </div>
-            <AlertCircle className="w-12 h-12 text-red-600 opacity-50" />
-          </div>
+          <button
+            onClick={handleExportExcel}
+            disabled={loading || qcData.length === 0}
+            className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
+          >
+            <Download className="w-4 h-4" />
+            Export
+          </button>
         </div>
       </div>
 
@@ -383,7 +307,6 @@ const AgentQCReport = () => {
                   <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Project/Task</th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">File</th>
                   <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Total Records</th>
-                  <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Errors</th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Error List</th>
                   <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">QC Score</th>
@@ -391,23 +314,67 @@ const AgentQCReport = () => {
               </thead>
               <tbody className="bg-white divide-y divide-blue-50">
                 {qcData.length > 0 ? (
-                  qcData.map((row, idx) => (
+                  qcData.map((row, idx) => {
+                    const dateTime = formatDateTime(row.evaluation_datetime);
+                    const errorCount = Array.isArray(row.error_list) ? row.error_list.length : 
+                                       (typeof row.error_list === 'string' && row.error_list !== '-' ? 
+                                       (() => {
+                                         try {
+                                           return JSON.parse(row.error_list).length;
+                                         } catch {
+                                           return 0;
+                                         }
+                                       })() : 0);
+                    
+                    return (
                     <tr key={idx} className="hover:bg-blue-50/50 transition-colors duration-150">
-                      <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">{row.evaluation_datetime || '-'}</td>
+                      <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-semibold">{dateTime.date}</span>
+                          <span className="text-xs text-gray-600">{dateTime.time}</span>
+                        </div>
+                      </td>
                       <td className="px-6 py-4 text-gray-900">{row.qa_agent || '-'}</td>
                       <td className="px-6 py-4 text-gray-900">{row.project_task || '-'}</td>
-                      <td className="px-6 py-4 text-gray-900 text-sm">{row.file_name || '-'}</td>
+                      <td className="px-6 py-4 text-center">
+                        {row.file_name && row.file_name !== '-' ? (
+                          <a 
+                            href={row.file_name}
+                            download={row.file_name.split('/').pop()}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 text-sm font-bold transition-colors group/link"
+                          >
+                            <Download className="w-4 h-4 group-hover/link:animate-bounce" />
+                            Download
+                          </a>
+                        ) : (
+                          <span className="text-gray-400 text-sm">-</span>
+                        )}
+                      </td>
                       <td className="px-6 py-4 text-center">
                         <span className="font-semibold text-gray-900">
                           {row.total_records || 0}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="font-semibold text-red-600">
-                          {row.error_count || 0}
-                        </span>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => handleOpenErrorListModal(row.error_list, {
+                            qaAgent: row.qa_agent,
+                            projectTask: row.project_task,
+                            evalDate: dateTime.date
+                          })}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-blue-100 border border-slate-200 hover:border-blue-300 rounded-lg text-slate-700 hover:text-blue-700 text-xs font-bold transition-all"
+                        >
+                          <FileSpreadsheet className="w-3 h-3" />
+                          View
+                          {errorCount > 0 && (
+                            <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px]">
+                              {errorCount}
+                            </span>
+                          )}
+                        </button>
                       </td>
-                      <td className="px-6 py-4 text-gray-600 text-sm">{row.error_list || '-'}</td>
                       <td className="px-6 py-4 text-center">
                         <span className={`px-3 py-1 rounded-lg font-semibold text-sm inline-block ${getStatusBadgeClass(row.status)}`}>
                           {row.status || '-'}
@@ -419,10 +386,11 @@ const AgentQCReport = () => {
                         </span>
                       </td>
                     </tr>
-                  ))
+                  );
+                  })
                 ) : (
                   <tr>
-                    <td colSpan={9} className="px-6 py-12 text-center text-gray-400 text-sm">
+                    <td colSpan={8} className="px-6 py-12 text-center text-gray-400 text-sm">
                       <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                       <p className="font-medium">No QC data available</p>
                       <p className="text-xs mt-1">Try adjusting your filters</p>
@@ -434,6 +402,125 @@ const AgentQCReport = () => {
           </div>
         )}
       </div>
+
+      {/* Statistics Cards */}
+      {!loading && !error && qcData.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+          {/* Average QC Score Card */}
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl shadow-md border border-blue-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-blue-700 mb-1">Average QC Score</p>
+                <p className="text-3xl font-bold text-blue-900">
+                  {qcData.length > 0 
+                    ? `${(qcData.reduce((sum, r) => sum + (Number(r.qc_score) || 0), 0) / qcData.length).toFixed(2)}%`
+                    : '-'}
+                </p>
+              </div>
+              <Award className="w-12 h-12 text-blue-600 opacity-50" />
+            </div>
+          </div>
+
+          {/* Total Submissions Card */}
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl shadow-md border border-green-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-green-700 mb-1">Total Submissions</p>
+                <p className="text-3xl font-bold text-green-900">{qcData.length}</p>
+              </div>
+              <FileSpreadsheet className="w-12 h-12 text-green-600 opacity-50" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error List Modal */}
+      {showErrorListModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-red-50 to-orange-50">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center shadow-sm">
+                  <AlertCircle className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-lg">Error List</h3>
+                  {selectedRecordInfo && (
+                    <p className="text-sm text-slate-600 font-medium mt-0.5">
+                      {selectedRecordInfo.qaAgent} • {selectedRecordInfo.projectTask}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={handleCloseErrorListModal}
+                className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 hover:bg-white/50 transition-all shadow-sm hover:shadow"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="px-6 py-5 max-h-[calc(85vh-180px)] overflow-y-auto">
+              {selectedErrorList.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                    <CheckCircle2 className="w-8 h-8 text-green-600" />
+                  </div>
+                  <p className="text-slate-600 font-semibold text-lg">No errors found</p>
+                  <p className="text-slate-500 text-sm mt-1">This record has a clean evaluation</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {selectedErrorList.map((error, index) => {
+                    const errorLabel = typeof error === 'object' 
+                      ? (error.error || error.name || error.message || error.error_type || JSON.stringify(error)) 
+                      : String(error);
+                    
+                    return (
+                      <div
+                        key={index}
+                        className="flex items-start gap-4 p-4 bg-red-50 border-2 border-red-200 rounded-xl hover:bg-red-100 hover:border-red-300 transition-all group"
+                      >
+                        <div className="flex items-center justify-center w-8 h-8 bg-red-200 rounded-lg shrink-0 mt-0.5 group-hover:bg-red-300 transition-all">
+                          <span className="text-red-700 font-bold text-sm">#{index + 1}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start gap-3">
+                            <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
+                            <p className="text-sm text-slate-800 font-medium leading-relaxed break-words">
+                              {errorLabel}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <AlertCircle className="w-4 h-4" />
+                  <span className="font-medium">
+                    Total Errors: <span className="font-bold text-slate-900">{selectedErrorList.length}</span>
+                  </span>
+                </div>
+                <button
+                  onClick={handleCloseErrorListModal}
+                  className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl transition-all shadow-md hover:shadow-lg"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

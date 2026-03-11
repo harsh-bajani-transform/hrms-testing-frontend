@@ -4,13 +4,14 @@
  * Description: QA Agent List - Shows assigned agents with their tracker data (files only)
  */
 import React, { useEffect, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { format } from "date-fns";
 import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RefreshCw, RotateCcw, Check, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import api from "../../services/api";
 import { fetchProjectCategoryAFD, generateQCSample } from "../../services/qcService";
 import { useAuth } from "../../context/AuthContext";
+import { useDeviceInfo } from "../../hooks/useDeviceInfo";
 import { log, logError } from "../../config/environment";
 import { DateRangePicker } from "../common/CustomCalendar";
 import QCFormReportView from "./QCFormReportView";
@@ -23,16 +24,19 @@ const getTodayDate = () => {
 
 const QAAgentList = () => {
   const { user } = useAuth();
+  const { device_id, device_type } = useDeviceInfo();
+  const [searchParams] = useSearchParams();
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [agentLoading, setAgentLoading] = useState(false);
-  const [qcFormLoading, setQcFormLoading] = useState(false);
+  const [qcFormLoading, setQcFormLoading] = useState(null); // Track specific tracker_id that's loading
   const [expandedAgents, setExpandedAgents] = useState({});
   const [agentTrackers, setAgentTrackers] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
   
-  // Tab state
-  const [activeTab, setActiveTab] = useState('agent_files');
+  // Tab state - read from URL parameter if available
+  const subtabParam = searchParams.get('subtab');
+  const [activeTab, setActiveTab] = useState(subtabParam === 'qc_report' ? 'qc_report' : 'agent_files');
   
   // Selected agent for split view
   const [selectedAgentId, setSelectedAgentId] = useState(null);
@@ -70,7 +74,10 @@ const QAAgentList = () => {
 
         // 2. Fetch ALL tracker data (no date filter) to get all agents assigned to this QA
         const allTrackersRes = await api.post("/tracker/view", {
-          logged_in_user_id: user?.user_id
+          logged_in_user_id: user?.user_id,
+          device_id: device_id,
+          device_type: device_type,
+          qc_pending: 0  // Fetch only QC pending trackers
         });
         const allTrackerData = allTrackersRes.data?.data || {};
         const allTrackers = allTrackerData.trackers || [];
@@ -95,8 +102,11 @@ const QAAgentList = () => {
         const today = getTodayDate();
         const todayTrackersRes = await api.post("/tracker/view", {
           logged_in_user_id: user?.user_id,
+          device_id: device_id,
+          device_type: device_type,
           date_from: today,
-          date_to: today
+          date_to: today,
+          qc_pending: 0  // Fetch only QC pending trackers
         });
         const todayTrackerData = todayTrackersRes.data?.data || {};
         const todayTrackers = todayTrackerData.trackers || [];
@@ -144,7 +154,7 @@ const QAAgentList = () => {
       }
     };
     fetchAllData();
-  }, [user?.user_id]);
+  }, [user?.user_id, device_id, device_type]);
 
   // Fetch tracker data for specific agent with date range
   const fetchAgentTrackers = async (agentId, startDate = null, endDate = null) => {
@@ -159,8 +169,11 @@ const QAAgentList = () => {
       
       const trackerRes = await api.post("/tracker/view", {
         logged_in_user_id: user?.user_id,
+        device_id: device_id,
+        device_type: device_type,
         date_from: filters.startDate,
-        date_to: filters.endDate
+        date_to: filters.endDate,
+        qc_pending: 0  // Fetch only QC pending trackers
       });
 
       const trackerData = trackerRes.data?.data || {};
@@ -300,7 +313,7 @@ const QAAgentList = () => {
       return;
     }
     
-    setQcFormLoading(true);
+    setQcFormLoading(tracker.tracker_id); // Set the specific tracker ID that's loading
     const loadingToast = toast.loading('Preparing QC Form...');
     
     try {
@@ -404,7 +417,7 @@ const QAAgentList = () => {
         { id: loadingToast }
       );
     } finally {
-      setQcFormLoading(false);
+      setQcFormLoading(null); // Reset loading state
     }
   };
 
@@ -788,10 +801,10 @@ const QAAgentList = () => {
                                             e.stopPropagation();
                                             handleQCForm(tracker);
                                           }}
-                                          disabled={qcFormLoading}
+                                          disabled={qcFormLoading === tracker.tracker_id}
                                           className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-700 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed disabled:transform-none text-white text-sm font-bold rounded-xl transition-all duration-300 shadow-md hover:shadow-xl transform hover:scale-105 group/btn"
                                         >
-                                          {qcFormLoading ? (
+                                          {qcFormLoading === tracker.tracker_id ? (
                                             <>
                                               <Loader2 className="w-4 h-4 animate-spin" />
                                               <span>Loading...</span>

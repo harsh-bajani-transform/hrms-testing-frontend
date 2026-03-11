@@ -5,7 +5,7 @@
  */
 import React, { useEffect, useState, useMemo } from "react";
 import { format } from "date-fns";
-import { Download, Filter, FileDown, Users as UsersIcon, Calendar, RotateCcw, RefreshCw, Edit, Trash2, X, ChevronDown, Briefcase, ListTodo, Info, Plus, ListChecks } from "lucide-react";
+import { Download, Filter, FileDown, Users as UsersIcon, Calendar, RotateCcw, RefreshCw, Edit, Trash2, X, ChevronDown, Briefcase, ListTodo, Info, Plus, ListChecks, Clock, TrendingUp, Target } from "lucide-react";
 import { toast } from "react-hot-toast";
 import * as XLSX from 'xlsx';
 import api from "../../services/api";
@@ -15,7 +15,6 @@ import { useDeviceInfo } from "../../hooks/useDeviceInfo";
 import { DateRangePicker } from "../common/CustomCalendar";
 import MultiSelectWithCheckbox from "../common/MultiSelectWithCheckbox";
 import SearchableSelect from "../common/SearchableSelect";
-import { Clock } from "lucide-react";
 
 // Helper to get today's date in YYYY-MM-DD format
 const getTodayDate = () => {
@@ -36,13 +35,20 @@ const QATrackerReport = () => {
                     String(designation).toLowerCase() === 'qa' || 
                     String(role).toLowerCase().includes('qa');
   
+  // Check if user is PM, Admin, or Super Admin (for team filter visibility)
+  const isProjectManager = roleId === 3 || String(designation).toLowerCase() === 'project manager' || String(role).toLowerCase().includes('project manager');
+  const isAdmin = roleId === 1 || String(role).toLowerCase() === 'admin' || String(designation).toLowerCase() === 'admin';
+  const isSuperAdmin = String(role).toLowerCase().includes('super') || String(designation).toLowerCase().includes('super');
+  const canViewTeamFilter = isProjectManager || isAdmin || isSuperAdmin;
+  
   const [trackers, setTrackers] = useState([]);
-  const [allTrackers, setAllTrackers] = useState([]); // Store all trackers for frontend filtering
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [apiTotals, setApiTotals] = useState(null); // Store totals from API
 
   // Filter states - Multi-select for agents
   const [selectedAgents, setSelectedAgents] = useState([]);
+  const [selectedTeams, setSelectedTeams] = useState(''); // Single select for teams
   const [selectedProject, setSelectedProject] = useState(''); // Single select for project
   const [selectedTask, setSelectedTask] = useState(''); // Single select for task
   const [startDate, setStartDate] = useState(getTodayDate()); // Default to today
@@ -109,6 +115,10 @@ const QATrackerReport = () => {
   const [usersList, setUsersList] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
 
+  // Teams list for team dropdown filter
+  const [teamsList, setTeamsList] = useState([]);
+  const [loadingTeams, setLoadingTeams] = useState(false);
+
   // Projects and Tasks lists for filter dropdowns
   const [projectsList, setProjectsList] = useState([]);
   const [tasksList, setTasksList] = useState([]);
@@ -169,30 +179,67 @@ const QATrackerReport = () => {
     }
   };
 
-  // Fetch users from user/list API for agent dropdown
-  const fetchUsers = async () => {
+  // Fetch users from dropdown/get API for agent dropdown
+  const fetchUsers = async (teamId = null) => {
     try {
       setLoadingUsers(true);
-      log('[QATrackerReport] Fetching users list for agent filter');
+      console.log('[QATrackerReport] fetchUsers called with teamId:', teamId);
+      log('[QATrackerReport] Fetching agents list for agent filter');
       const payload = {
-        user_id: String(user?.user_id),
-        device_id: device_id,
-        device_type: device_type
+        logged_in_user_id: user?.user_id,
+        dropdown_type: "agent"
       };
-      const res = await api.post("/user/list", payload);
-      const users = res.data?.data || [];
-      // Sort users alphabetically by name
-      const sortedUsers = users
-        .filter(u => u.user_name && u.user_id) // Filter out invalid entries
-        .sort((a, b) => a.user_name.localeCompare(b.user_name));
-      setUsersList(sortedUsers);
-      log('[QATrackerReport] Users fetched successfully:', sortedUsers.length);
+      // Add team_id if provided
+      if (teamId) {
+        payload.team_id = Number(teamId);
+        console.log('[QATrackerReport] Payload with team_id:', payload);
+        log('[QATrackerReport] Filtering agents by team_id:', teamId);
+      } else {
+        console.log('[QATrackerReport] Payload without team_id:', payload);
+      }
+      const res = await api.post("/dropdown/get", payload);
+      const agents = res.data?.data || [];
+      console.log('[QATrackerReport] Agents received from API:', agents.length);
+      // Sort agents alphabetically by label
+      const sortedAgents = agents
+        .filter(a => a.label && a.user_id) // Filter out invalid entries
+        .sort((a, b) => a.label.localeCompare(b.label));
+      setUsersList(sortedAgents);
+      console.log('[QATrackerReport] Agents list updated:', sortedAgents.length);
+      log('[QATrackerReport] Agents fetched successfully:', sortedAgents.length);
     } catch (error) {
-      logError('[QATrackerReport] Error fetching users:', error);
+      console.error('[QATrackerReport] Error fetching agents:', error);
+      logError('[QATrackerReport] Error fetching agents:', error);
       setUsersList([]);
-      toast.error("Failed to load users for filter");
+      toast.error("Failed to load agents for filter");
     } finally {
       setLoadingUsers(false);
+    }
+  };
+
+  // Fetch teams from dropdown/get API for team dropdown
+  const fetchTeams = async () => {
+    try {
+      setLoadingTeams(true);
+      log('[QATrackerReport] Fetching teams list for team filter');
+      const payload = {
+        logged_in_user_id: user?.user_id,
+        dropdown_type: "teams"
+      };
+      const res = await api.post("/dropdown/get", payload);
+      const teams = res.data?.data || [];
+      // Sort teams alphabetically by label
+      const sortedTeams = teams
+        .filter(t => t.label && (t.team_id || t.value)) // Filter out invalid entries
+        .sort((a, b) => a.label.localeCompare(b.label));
+      setTeamsList(sortedTeams);
+      log('[QATrackerReport] Teams fetched successfully:', sortedTeams.length);
+    } catch (error) {
+      logError('[QATrackerReport] Error fetching teams:', error);
+      setTeamsList([]);
+      toast.error("Failed to load teams for filter");
+    } finally {
+      setLoadingTeams(false);
     }
   };
 
@@ -219,13 +266,17 @@ const QATrackerReport = () => {
     }
   };
 
-  // Fetch trackers and summary from tracker/view API with only date range (no agent filter in API)
+  // Fetch trackers and summary from tracker/view API with filters
   const fetchData = async () => {
     try {
       setLoading(true);
       let payload = {
         logged_in_user_id: user?.user_id,
+        device_id: device_id,
+        device_type: device_type
       };
+      
+      // Add date filters
       if (startDate) payload.date_from = startDate;
       if (endDate) payload.date_to = endDate;
       // If no date filter, use today's date for both from/to
@@ -234,18 +285,43 @@ const QATrackerReport = () => {
         payload.date_from = today;
         payload.date_to = today;
       }
+      
+      // Add filter parameters if selected
+      if (selectedAgents.length > 0) {
+        // Send first selected agent as user_id (API expects single value)
+        payload.user_id = Number(selectedAgents[0]);
+      }
+      
+      if (selectedTeams) {
+        // Send selected team as team_id
+        payload.team_id = Number(selectedTeams);
+      }
+      
+      if (selectedProject) {
+        payload.project_id = Number(selectedProject);
+      }
+      
+      if (selectedTask) {
+        payload.task_id = Number(selectedTask);
+      }
+      
+      log('[QATrackerReport] Fetching tracker data with payload:', payload);
       const res = await api.post("/tracker/view", payload);
       const data = res.data?.data || {};
       const fetchedTrackers = Array.isArray(data.trackers) ? data.trackers : [];
-      setAllTrackers(fetchedTrackers); // Store all trackers
-      setTrackers(fetchedTrackers); // Initially show all
+      setTrackers(fetchedTrackers);
       setSummary(Array.isArray(data.month_summary) ? data.month_summary : []);
+      // Store totals from API response
+      if (data.totals) {
+        setApiTotals(data.totals);
+      }
+      log('[QATrackerReport] Fetched trackers:', fetchedTrackers.length, 'totals:', data.totals);
     } catch (err) {
       logError('[QATrackerReport] Error fetching tracker/view:', err);
       toast.error("Failed to load tracker data");
-      setAllTrackers([]);
       setTrackers([]);
       setSummary([]);
+      setApiTotals(null);
     } finally {
       setLoading(false);
     }
@@ -255,18 +331,42 @@ const QATrackerReport = () => {
   useEffect(() => {
     if (user?.user_id && device_id && device_type) {
       fetchUsers();
+      if (canViewTeamFilter) {
+        fetchTeams();
+      }
       fetchProjectsAndTasks();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.user_id, device_id, device_type]);
 
-  // Fetch tracker data when date filters change
+  // Refetch agents when team selection changes
   useEffect(() => {
-    if (user?.user_id) {
+    // Skip on initial mount (when component first loads)
+    if (!user?.user_id) return;
+    
+    console.log('[QATrackerReport] Team selection changed:', selectedTeams);
+    
+    if (selectedTeams) {
+      // Fetch agents filtered by selected team
+      console.log('[QATrackerReport] Fetching agents for team_id:', selectedTeams);
+      fetchUsers(selectedTeams);
+      // Clear selected agents when team changes
+      setSelectedAgents([]);
+    } else {
+      // Fetch all agents when no team is selected
+      console.log('[QATrackerReport] No team selected, fetching all agents');
+      fetchUsers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTeams]);
+
+  // Fetch tracker data when date filters or other filters change
+  useEffect(() => {
+    if (user?.user_id && device_id && device_type) {
       fetchData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.user_id, startDate, endDate]);
+  }, [user?.user_id, device_id, device_type, startDate, endDate, selectedAgents, selectedTeams, selectedProject, selectedTask]);
 
   // Clear selected task when project changes
   useEffect(() => {
@@ -282,36 +382,6 @@ const QATrackerReport = () => {
     }
     return tasksList.filter(task => String(task.project_id) === String(selectedProject));
   }, [tasksList, selectedProject]);
-
-  // Filter trackers based on selected agents, project, and task (frontend filtering)
-  useEffect(() => {
-    let filtered = allTrackers;
-
-    // Filter by selected agents
-    if (selectedAgents.length > 0) {
-      filtered = filtered.filter(tracker => 
-        selectedAgents.includes(String(tracker.user_id))
-      );
-    }
-
-    // Filter by selected project
-    if (selectedProject) {
-      filtered = filtered.filter(tracker => 
-        String(tracker.project_id) === String(selectedProject)
-      );
-    }
-
-    // Filter by selected task
-    if (selectedTask) {
-      filtered = filtered.filter(tracker => 
-        String(tracker.task_id) === String(selectedTask)
-      );
-    }
-
-    setTrackers(filtered);
-  }, [selectedAgents, selectedProject, selectedTask, allTrackers]);
-
-  // Remove in-memory filtering; handled by API
 
   // Format date and time to display format: 3/Feb/2026 and 9:52 PM (UTC)
   const formatDateTime = (dateTimeStr) => {
@@ -427,6 +497,7 @@ const QATrackerReport = () => {
   const handleClearFilters = () => {
     const today = getTodayDate();
     setSelectedAgents([]);
+    setSelectedTeams('');
     setSelectedProject('');
     setSelectedTask('');
     setStartDate(today);
@@ -499,11 +570,17 @@ const QATrackerReport = () => {
     // When agent changes, recalculate base target if task is selected
     if (field === 'agent_id' && value) {
       const selectedAgent = usersList.find(u => String(u.user_id) === String(value));
+      log('[QATrackerReport] Agent changed:', value, 'Selected agent:', selectedAgent);
       if (selectedAgent && addFormData.task_id) {
         const project = addProjects.find(p => String(p.project_id) === String(addFormData.project_id));
         const task = project?.tasks?.find(t => String(t.task_id) === String(addFormData.task_id));
-        if (task && selectedAgent.user_tenure) {
-          const calculated = Number(task.task_target) * Number(selectedAgent.user_tenure);
+        log('[QATrackerReport] Task for recalc:', task);
+        const userTenure = selectedAgent.user_tenure || selectedAgent.tenure || 1;
+        log('[QATrackerReport] User tenure:', userTenure);
+        if (task && userTenure) {
+          const perHourTarget = task.task_target || task.per_hour_target || task.target || task.label_value || 0;
+          const calculated = Number(perHourTarget) * Number(userTenure);
+          log('[QATrackerReport] Recalculated base target:', calculated, 'per hour:', perHourTarget, 'tenure:', userTenure);
           setAddFormData(prev => ({ ...prev, base_target: calculated.toFixed(2) }));
         }
       }
@@ -520,10 +597,21 @@ const QATrackerReport = () => {
     if (field === 'task_id' && value) {
       const project = addProjects.find(p => String(p.project_id) === String(addFormData.project_id));
       const task = project?.tasks?.find(t => String(t.task_id) === String(value));
+      log('[QATrackerReport] Task changed in add modal:', value, 'Task found:', task);
+      if (task) {
+        log('[QATrackerReport] Task fields:', Object.keys(task));
+      }
       const selectedAgent = usersList.find(u => String(u.user_id) === String(addFormData.agent_id));
-      if (task && selectedAgent?.user_tenure) {
-        const calculated = Number(task.task_target) * Number(selectedAgent.user_tenure);
+      log('[QATrackerReport] Selected agent for calc:', selectedAgent);
+      const userTenure = selectedAgent?.user_tenure || selectedAgent?.tenure || 1;
+      log('[QATrackerReport] User tenure from agent:', userTenure);
+      if (task && userTenure) {
+        const perHourTarget = task.task_target || task.per_hour_target || task.target || task.label_value || 0;
+        const calculated = Number(perHourTarget) * Number(userTenure);
+        log('[QATrackerReport] Calculated base target:', calculated, 'per hour:', perHourTarget, 'tenure:', userTenure);
         setAddFormData(prev => ({ ...prev, base_target: calculated.toFixed(2) }));
+      } else {
+        log('[QATrackerReport] Could not calculate - task:', !!task, 'user_tenure:', userTenure);
       }
     }
     
@@ -1041,15 +1129,37 @@ const QATrackerReport = () => {
     setEditProductionError("");
   };
 
-  // Calculate totals from filtered trackers
+  // Use API totals if available, otherwise calculate from trackers
   const totals = useMemo(() => {
-    return trackers.reduce((acc, tracker) => {
+    if (apiTotals) {
+      return {
+        activeAgents: apiTotals.total_active_agents || 0,
+        assignHours: apiTotals.total_assigned_hours || 0,
+        tenureTarget: apiTotals.total_tenure_target || 0,
+        production: apiTotals.total_production || 0,
+        billableHours: apiTotals.total_billable_hours || 0
+      };
+    }
+    
+    // Fallback: calculate from filtered trackers
+    const uniqueAgents = new Set();
+    const totalsData = trackers.reduce((acc, tracker) => {
+      // Track unique agents
+      if (tracker.user_id) {
+        uniqueAgents.add(tracker.user_id);
+      }
       acc.tenureTarget += Number(tracker.tenure_target) || 0;
       acc.production += Number(tracker.production) || 0;
       acc.billableHours += Number(tracker.billable_hours) || 0;
       return acc;
     }, { tenureTarget: 0, production: 0, billableHours: 0 });
-  }, [trackers]);
+    
+    return {
+      ...totalsData,
+      activeAgents: uniqueAgents.size,
+      assignHours: totalsData.billableHours // Using billable hours as assign hours
+    };
+  }, [trackers, apiTotals]);
 
   // Calculate monthly summary from filtered trackers
   const monthlySummary = useMemo(() => {
@@ -1187,7 +1297,7 @@ const QATrackerReport = () => {
             </div>
 
             {/* Agent Multi-Select Dropdown */}
-            <div style={{ width: '210px' }}>
+            <div style={{ width: '180px' }}>
               <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">
                 <UsersIcon className="w-3.5 h-3.5 text-blue-600" />
                 Agents
@@ -1199,7 +1309,7 @@ const QATrackerReport = () => {
                 onChange={setSelectedAgents}
                 options={usersList.map(agent => ({ 
                   value: String(agent.user_id), 
-                  label: agent.user_name 
+                  label: agent.label 
                 }))}
                 placeholder="Select Agents"
                 showSelectAll={true}
@@ -1207,8 +1317,31 @@ const QATrackerReport = () => {
               />
             </div>
 
+            {/* Team Dropdown - Only for PM, Admin, Super Admin */}
+            {canViewTeamFilter && (
+              <div style={{ width: '180px' }}>
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">
+                  <UsersIcon className="w-3.5 h-3.5 text-blue-600" />
+                  Teams
+                </label>
+                
+                <SearchableSelect
+                  icon={UsersIcon}
+                  value={selectedTeams}
+                  onChange={setSelectedTeams}
+                  options={teamsList.map(team => ({ 
+                    value: String(team.team_id || team.value), 
+                    label: team.label 
+                  }))}
+                  placeholder="Select Team"
+                  isClearable={true}
+                  disabled={loadingTeams}
+                />
+              </div>
+            )}
+
             {/* Project Dropdown */}
-            <div style={{ width: '210px' }}>
+            <div style={{ width: '180px' }}>
               <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">
                 <Briefcase className="w-3.5 h-3.5 text-blue-600" />
                 Project
@@ -1229,7 +1362,7 @@ const QATrackerReport = () => {
             </div>
 
             {/* Task Dropdown */}
-            <div style={{ width: '210px' }}>
+            <div style={{ width: '182px' }}>
               <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">
                 <ListTodo className="w-3.5 h-3.5 text-blue-600" />
                 Task
@@ -1263,31 +1396,32 @@ const QATrackerReport = () => {
                 </button>
               </div>
             )}
-          </div>
 
-          {/* Action Buttons - Right Aligned */}
-          <div className="flex justify-end gap-2">
             {/* Reset Filters Button */}
-            <button
-              onClick={handleClearFilters}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-sm hover:shadow-md transition-all duration-200 group"
-              type="button"
-            >
-              <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" />
-              Reset
-            </button>
+            <div className="flex items-end">
+              <button
+                onClick={handleClearFilters}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-sm hover:shadow-md transition-all duration-200 group"
+                type="button"
+              >
+                <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" />
+                Reset
+              </button>
+            </div>
             
             {/* Refresh Button */}
-            <button
-              onClick={fetchData}
-              disabled={loading}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-teal-600 hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold text-sm shadow-sm hover:shadow-md transition-all duration-200 group"
-              type="button"
-              title="Refresh data"
-            >
-              <RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" />
-              Refresh
-            </button>
+            <div className="flex items-end">
+              <button
+                onClick={fetchData}
+                disabled={loading}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-teal-600 hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold text-sm shadow-sm hover:shadow-md transition-all duration-200 group"
+                type="button"
+                title="Refresh data"
+              >
+                <RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" />
+                Refresh
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1306,22 +1440,24 @@ const QATrackerReport = () => {
             <div className="max-h-[600px] overflow-y-auto">
               <table className="min-w-full text-sm text-slate-700 table-fixed">
                 <colgroup>
-                  <col style={{ width: isQAAgent ? '9%' : '7%' }}/>
-                  <col style={{ width: isQAAgent ? '10%' : '8%' }}/>
-                  <col style={{ width: isQAAgent ? '10%' : '8%' }}/>
-                  <col style={{ width: isQAAgent ? '10%' : '8%' }}/>
-                  <col style={{ width: isQAAgent ? '8%' : '7%' }}/>
-                  <col style={{ width: isQAAgent ? '9%' : '7%' }}/>
-                  <col style={{ width: isQAAgent ? '9%' : '7%' }}/>
-                  <col style={{ width: isQAAgent ? '9%' : '7%' }}/>
-                  <col style={{ width: isQAAgent ? '16%' : '14%' }}/>
-                  <col style={{ width: isQAAgent ? '10%' : '8%' }}/>
+                  <col style={{ width: canViewTeamFilter ? '7%' : (isQAAgent ? '9%' : '7%') }}/>
+                  <col style={{ width: canViewTeamFilter ? '8%' : (isQAAgent ? '10%' : '8%') }}/>
+                  {canViewTeamFilter && <col style={{ width: '8%' }}/>}
+                  <col style={{ width: canViewTeamFilter ? '8%' : (isQAAgent ? '10%' : '8%') }}/>
+                  <col style={{ width: canViewTeamFilter ? '8%' : (isQAAgent ? '10%' : '8%') }}/>
+                  <col style={{ width: canViewTeamFilter ? '7%' : (isQAAgent ? '8%' : '7%') }}/>
+                  <col style={{ width: canViewTeamFilter ? '7%' : (isQAAgent ? '9%' : '7%') }}/>
+                  <col style={{ width: canViewTeamFilter ? '7%' : (isQAAgent ? '9%' : '7%') }}/>
+                  <col style={{ width: canViewTeamFilter ? '7%' : (isQAAgent ? '9%' : '7%') }}/>
+                  <col style={{ width: canViewTeamFilter ? '14%' : (isQAAgent ? '16%' : '14%') }}/>
+                  <col style={{ width: canViewTeamFilter ? '8%' : (isQAAgent ? '10%' : '8%') }}/>
                   {!isQAAgent && <col style={{ width: '12%' }}/>}
                 </colgroup>
                 <thead className="bg-gradient-to-r from-blue-600 to-blue-700 sticky top-0 z-10">
                   <tr>
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Date/Time</th>
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Agent</th>
+                    {canViewTeamFilter && <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Team</th>}
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Project</th>
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Task</th>
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Shift</th>
@@ -1336,7 +1472,7 @@ const QATrackerReport = () => {
                 <tbody className="divide-y divide-slate-200">
             {loading ? (
               <tr>
-                <td colSpan={isQAAgent ? "10" : "11"} className="px-5 py-16 text-center">
+                <td colSpan={canViewTeamFilter ? (isQAAgent ? "11" : "12") : (isQAAgent ? "10" : "11")} className="px-5 py-16 text-center">
                   <div className="flex flex-col items-center justify-center gap-4">
                     <RefreshCw className="w-10 h-10 text-blue-600 animate-spin" />
                     <p className="text-slate-600 font-medium text-base">Loading tracker data...</p>
@@ -1345,7 +1481,7 @@ const QATrackerReport = () => {
               </tr>
             ) : trackers.length === 0 ? (
               <tr>
-                <td colSpan={isQAAgent ? "10" : "11"} className="px-5 py-16 text-center">
+                <td colSpan={canViewTeamFilter ? (isQAAgent ? "11" : "12") : (isQAAgent ? "10" : "11")} className="px-5 py-16 text-center">
                   <div className="flex flex-col items-center justify-center gap-4">
                     <svg className="w-16 h-16 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1370,6 +1506,11 @@ const QATrackerReport = () => {
                   <td className="px-5 py-3 align-middle font-semibold text-blue-700 whitespace-nowrap">
                     {tracker.user_name || "-"}
                   </td>
+                  {canViewTeamFilter && (
+                    <td className="px-5 py-3 align-middle whitespace-nowrap text-slate-800">
+                      {tracker.team_name || "-"}
+                    </td>
+                  )}
                   <td className="px-5 py-3 align-middle whitespace-nowrap">
                     {tracker.project_name || "-"}
                   </td>
@@ -1478,23 +1619,70 @@ const QATrackerReport = () => {
             <div className="w-1.5 h-8 bg-gradient-to-b from-blue-600 to-blue-700 rounded-full"></div>
             Summary Totals
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Per Hour Target */}
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-2xl p-6 shadow-md hover:shadow-xl hover:scale-105 transition-all duration-300">
-              <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-2">Per Hour Target</p>
-              <p className="text-4xl font-extrabold text-blue-900">{totals.tenureTarget.toFixed(2)}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            {/* Total Active Agents */}
+            <div className="relative p-5 flex items-center justify-between gap-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all duration-300">
+              <div className="flex-1 min-w-0 z-10">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Total Active Agents</p>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-extrabold truncate text-slate-900">{totals.activeAgents}</h3>
+              </div>
+              <div className="p-3 rounded-xl shadow-sm flex-shrink-0 z-10 bg-blue-100">
+                <UsersIcon className="w-6 h-6 text-blue-600" />
+              </div>
             </div>
             
-            {/* Production */}
-            <div className="bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 rounded-2xl p-6 shadow-md hover:shadow-xl hover:scale-105 transition-all duration-300">
-              <p className="text-xs font-bold text-green-700 uppercase tracking-wider mb-2">Production</p>
-              <p className="text-4xl font-extrabold text-green-900">{totals.production.toFixed(2)}</p>
+            {/* Total Assign Hours */}
+            <div className="relative p-5 flex items-center justify-between gap-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all duration-300">
+              <div className="flex-1 min-w-0 z-10">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Total Assign Hours</p>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-extrabold truncate text-slate-900">{totals.assignHours.toFixed(2)}</h3>
+              </div>
+              <div className="p-3 rounded-xl shadow-sm flex-shrink-0 z-10 bg-green-100">
+                <Clock className="w-6 h-6 text-green-600" />
+              </div>
             </div>
             
-            {/* Billable Hours */}
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-200 rounded-2xl p-6 shadow-md hover:shadow-xl hover:scale-105 transition-all duration-300">
-              <p className="text-xs font-bold text-purple-700 uppercase tracking-wider mb-2">Billable Hours</p>
-              <p className="text-4xl font-extrabold text-purple-900">{totals.billableHours.toFixed(2)}</p>
+            {/* Total Per Hour Target */}
+            <div className="relative p-5 flex items-center justify-between gap-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all duration-300">
+              <div className="flex-1 min-w-0 z-10">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Total Per Hour Target</p>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-extrabold truncate text-slate-900">{totals.tenureTarget.toFixed(2)}</h3>
+              </div>
+              <div className="p-3 rounded-xl shadow-sm flex-shrink-0 z-10 bg-purple-100">
+                <Target className="w-6 h-6 text-purple-600" />
+              </div>
+            </div>
+            
+            {/* Total Production */}
+            <div className="relative p-5 flex items-center justify-between gap-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all duration-300">
+              <div className="flex-1 min-w-0 z-10">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Total Production</p>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-extrabold truncate text-slate-900">{totals.production.toFixed(2)}</h3>
+              </div>
+              <div className="p-3 rounded-xl shadow-sm flex-shrink-0 z-10 bg-orange-100">
+                <TrendingUp className="w-6 h-6 text-orange-600" />
+              </div>
+            </div>
+            
+            {/* Total Billable Hours */}
+            <div className="relative p-5 flex items-center justify-between gap-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all duration-300">
+              <div className="flex-1 min-w-0 z-10">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Total Billable Hours</p>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-extrabold truncate text-slate-900">{totals.billableHours.toFixed(2)}</h3>
+              </div>
+              <div className="p-3 rounded-xl shadow-sm flex-shrink-0 z-10 bg-indigo-100">
+                <Briefcase className="w-6 h-6 text-indigo-600" />
+              </div>
             </div>
           </div>
         </div>
@@ -1604,20 +1792,22 @@ const QATrackerReport = () => {
                           <span className="text-red-500">*</span>
                         </label>
                         
-                        {/* Date Picker */}
-                        <div className="relative cursor-pointer mb-2">
-                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-600 pointer-events-none" />
-                          <input
-                            type="date"
-                            className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-10 pr-4 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all shadow-sm hover:bg-white cursor-pointer"
-                            value={editFormData.tracker_datetime ? editFormData.tracker_datetime.split('T')[0] : ''}
-                            onChange={(e) => {
-                              const date = e.target.value;
-                              const time = editFormData.tracker_datetime ? editFormData.tracker_datetime.split('T')[1] : '00:00';
-                              setEditFormData(prev => ({ ...prev, tracker_datetime: date ? `${date}T${time}` : '' }));
-                            }}
-                            max={new Date().toISOString().split('T')[0]}
-                          />
+                        {/* Date Picker using CustomCalendar */}
+                        <div className="mb-2">
+                          <div className="[&>*]:!flex-row [&>*]:!items-start [&>*>*:nth-child(1)_label]:!hidden [&>*>*:nth-child(2)]:!hidden [&>*>*:nth-child(3)]:!hidden">
+                            <DateRangePicker
+                              startDate={editFormData.tracker_datetime ? editFormData.tracker_datetime.split('T')[0] : ''}
+                              endDate={editFormData.tracker_datetime ? editFormData.tracker_datetime.split('T')[0] : ''}
+                              onStartDateChange={(date) => {
+                                const time = editFormData.tracker_datetime ? editFormData.tracker_datetime.split('T')[1] : '00:00';
+                                setEditFormData(prev => ({ ...prev, tracker_datetime: date ? `${date}T${time}` : '' }));
+                              }}
+                              onEndDateChange={() => {}} // Not used for single date picker
+                              showClearButton={false}
+                              noWrapper={true}
+                              fieldWidth="100%"
+                            />
+                          </div>
                         </div>
                         
                         {/* Time Picker - 12 Hour Format */}
@@ -2091,7 +2281,7 @@ const QATrackerReport = () => {
                             onChange={(value) => handleAddFieldChange('agent_id', value)}
                             options={[
                               { value: '', label: 'Select an agent...' },
-                              ...usersList.map(u => ({ value: String(u.user_id), label: u.user_name }))
+                              ...usersList.map(u => ({ value: String(u.user_id), label: u.label }))
                             ]}
                             icon={UsersIcon}
                             placeholder="Select an agent..."
@@ -2117,24 +2307,26 @@ const QATrackerReport = () => {
                             <span className="text-red-500">*</span>
                           </label>
                           
-                          {/* Date Picker */}
-                          <div className="relative cursor-pointer mb-2">
-                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-600 pointer-events-none" />
-                            <input
-                              type="date"
-                              className={`w-full bg-slate-50 border rounded-lg pl-10 pr-4 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 transition-all shadow-sm hover:bg-white cursor-pointer ${
-                                addTouched.tracker_datetime && addErrors.tracker_datetime
-                                  ? 'border-red-500 focus:border-red-500 focus:ring-red-100'
-                                  : 'border-slate-300 focus:border-blue-500 focus:ring-blue-100'
-                              }`}
-                              value={addFormData.tracker_datetime ? addFormData.tracker_datetime.split('T')[0] : ''}
-                              onChange={(e) => {
-                                const date = e.target.value;
-                                const time = addFormData.tracker_datetime ? addFormData.tracker_datetime.split('T')[1] : '00:00';
-                                handleAddFieldChange('tracker_datetime', date ? `${date}T${time}` : '');
-                              }}
-                              max={new Date().toISOString().split('T')[0]}
-                            />
+                          {/* Date Picker using CustomCalendar */}
+                          <div className={`mb-2 ${
+                            addTouched.tracker_datetime && addErrors.tracker_datetime
+                              ? 'ring-2 ring-red-200 rounded-lg'
+                              : ''
+                          }`}>
+                            <div className="[&>*]:!flex-row [&>*]:!items-start [&>*>*:nth-child(1)_label]:!hidden [&>*>*:nth-child(2)]:!hidden [&>*>*:nth-child(3)]:!hidden">
+                              <DateRangePicker
+                                startDate={addFormData.tracker_datetime ? addFormData.tracker_datetime.split('T')[0] : ''}
+                                endDate={addFormData.tracker_datetime ? addFormData.tracker_datetime.split('T')[0] : ''}
+                                onStartDateChange={(date) => {
+                                  const time = addFormData.tracker_datetime ? addFormData.tracker_datetime.split('T')[1] : '00:00';
+                                  handleAddFieldChange('tracker_datetime', date ? `${date}T${time}` : '');
+                                }}
+                                onEndDateChange={() => {}} // Not used for single date picker
+                                showClearButton={false}
+                                noWrapper={true}
+                                fieldWidth="100%"
+                              />
+                            </div>
                           </div>
                           
                           {/* Time Picker - 12 Hour Format */}

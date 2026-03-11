@@ -3,6 +3,7 @@ import { toast } from 'react-hot-toast';
 import { X, Upload, ChevronDown, ExternalLink, Users, Table } from 'lucide-react';
 import { updateTask } from '../../../../services/projectService';
 import { fetchDropdown } from '../../../../services/dropdownService';
+import { useAuth } from '../../../../context/AuthContext';
 import MultiSelectWithCheckbox from '../../../common/MultiSelectWithCheckbox';
 import * as XLSX from 'xlsx';
 
@@ -13,6 +14,7 @@ const EditTaskModal = ({
   projectId,
   onTaskUpdated
 }) => {
+  const { user } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -126,25 +128,51 @@ const EditTaskModal = ({
 
   useEffect(() => {
     const loadAgents = async () => {
+      // Get user_id from context or fallback to sessionStorage
+      let userId = user?.user_id;
+      
+      if (!userId) {
+        try {
+          const storedUser = sessionStorage.getItem('user');
+          if (storedUser) {
+            const parsed = JSON.parse(storedUser);
+            userId = parsed?.user_id || parsed?.id;
+          }
+        } catch (e) {
+          console.error('[EditTaskModal] Failed to parse user from sessionStorage:', e);
+        }
+      }
+      
+      console.log('[EditTaskModal] Loading agents with userId:', userId, 'projectId:', projectId);
+      
+      // Don't proceed if we don't have required data
+      if (!userId || !projectId) {
+        console.warn('[EditTaskModal] Missing required data - userId:', userId, 'projectId:', projectId);
+        setAgents([]);
+        return;
+      }
+      
       setAgentsLoading(true);
       setAgentsError('');
       try {
-        const data = await fetchDropdown('agent', projectId);
+        const data = await fetchDropdown('agent', userId, projectId);
         const normalized = (data || []).map((item) => {
           const candidate = Array.isArray(item) ? item[0] : item;
           const id = candidate?.user_id || candidate?.team_id || candidate?.id;
           const label = candidate?.label || candidate?.name || candidate?.user_name || candidate?.team_name || '';
           return id ? { id: String(id), label } : null;
         }).filter(Boolean);
+        console.log('[EditTaskModal] Agents loaded:', normalized.length);
         setAgents(normalized);
       } catch (error) {
+        console.error('[EditTaskModal] Error loading agents:', error);
         setAgentsError('Unable to load agents');
       } finally {
         setAgentsLoading(false);
       }
     };
     loadAgents();
-  }, [projectId]);
+  }, [projectId, user?.user_id]);
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));

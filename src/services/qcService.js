@@ -93,6 +93,13 @@ export const generateQCSample = async (tracker_id, logged_in_user_id) => {
     });
 
     log(`[QC Service] Sample generated successfully:`, response.data);
+    log(`[QC Service] Full response structure:`, JSON.stringify(response.data, null, 2));
+    log(`[QC Service] File path check:`, {
+      'response.data.file_path': response.data?.file_path,
+      'response.data["10%_file_path"]': response.data?.['10%_file_path'],
+      'response.data.data.file_path': response.data?.data?.file_path,
+      'response.data.data["10%_file_path"]': response.data?.data?.['10%_file_path']
+    });
     return response.data;
   } catch (error) {
     logError("[QC Service] Error generating QC sample:", error);
