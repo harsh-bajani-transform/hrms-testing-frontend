@@ -16,7 +16,9 @@ import {
   Award,
   CheckCircle2,
   AlertCircle,
-  X
+  X,
+  Upload,
+  File
 } from 'lucide-react';
 import { getFriendlyErrorMessage } from '../../utils/errorMessages';
 import ErrorMessage from '../common/ErrorMessage';
@@ -82,8 +84,11 @@ const AgentQCReport = () => {
     }
   };
 
-  // Handle Error List Modal
-  const handleOpenErrorListModal = (errorList, recordInfo) => {
+  // Handle Rework/Correction Modal
+  const handleOpenReworkModal = (errorList, recordInfo, status, qcId) => {
+    // Modal can open for all statuses to view errors
+    // File upload will only be available for rework/correction
+
     // Ensure errorList is always an array
     let parsedErrorList = [];
     
@@ -99,7 +104,7 @@ const AgentQCReport = () => {
     }
     
     setSelectedErrorList(parsedErrorList);
-    setSelectedRecordInfo(recordInfo);
+    setSelectedRecordInfo({ ...recordInfo, status, qcId });
     setShowErrorListModal(true);
   };
 
@@ -107,6 +112,69 @@ const AgentQCReport = () => {
     setShowErrorListModal(false);
     setSelectedErrorList([]);
     setSelectedRecordInfo(null);
+    setUploadedFile(null);
+    setFilePreview(null);
+    setUploadError('');
+  };
+
+  // Handle file upload
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setUploadError('File size must be less than 10MB');
+      return;
+    }
+
+    setUploadedFile(file);
+    setFilePreview(file.name);
+    setUploadError('');
+  };
+
+  // Handle file submission
+  const handleSubmitRework = async () => {
+    if (!uploadedFile) {
+      toast.error('Please upload a file before submitting');
+      return;
+    }
+
+    if (!selectedRecordInfo?.qcId) {
+      toast.error('Invalid record information');
+      return;
+    }
+
+    setSubmittingRework(true);
+    const loadingToast = toast.loading('Uploading rework file...');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadedFile);
+      formData.append('qc_id', selectedRecordInfo.qcId);
+      formData.append('user_id', user?.user_id);
+      formData.append('status', selectedRecordInfo.status);
+
+      // Submit to API (adjust endpoint as needed)
+      const response = await nodeApi.post('/qc-records/rework-upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      toast.success('Rework file uploaded successfully!', { id: loadingToast });
+      handleCloseErrorListModal();
+      
+      // Refresh data
+      window.location.reload();
+    } catch (err) {
+      console.error('[AgentQCReport] Error uploading rework file:', err);
+      const msg = getFriendlyErrorMessage(err);
+      toast.error(msg, { id: loadingToast });
+    } finally {
+      setSubmittingRework(false);
+    }
   };
 
   // State management
@@ -118,6 +186,10 @@ const AgentQCReport = () => {
   const [showErrorListModal, setShowErrorListModal] = useState(false);
   const [selectedErrorList, setSelectedErrorList] = useState([]);
   const [selectedRecordInfo, setSelectedRecordInfo] = useState(null);
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
+  const [uploadError, setUploadError] = useState('');
+  const [submittingRework, setSubmittingRework] = useState(false);
 
   // Filter data by date range on frontend
   const qcData = useMemo(() => {
@@ -358,22 +430,41 @@ const AgentQCReport = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <button
-                          onClick={() => handleOpenErrorListModal(row.error_list, {
-                            qaAgent: row.qa_agent,
-                            projectTask: row.project_task,
-                            evalDate: dateTime.date
-                          })}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-blue-100 border border-slate-200 hover:border-blue-300 rounded-lg text-slate-700 hover:text-blue-700 text-xs font-bold transition-all"
-                        >
-                          <FileSpreadsheet className="w-3 h-3" />
-                          View
-                          {errorCount > 0 && (
-                            <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px]">
-                              {errorCount}
-                            </span>
-                          )}
-                        </button>
+                        {(row.status?.toLowerCase() === 'rework' || row.status?.toLowerCase() === 'correction') ? (
+                          <button
+                            onClick={() => handleOpenReworkModal(row.error_list, {
+                              qaAgent: row.qa_agent,
+                              projectTask: row.project_task,
+                              evalDate: dateTime.date
+                            }, row.status, row.qc_id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-100 hover:bg-orange-200 border border-orange-300 hover:border-orange-400 rounded-lg text-orange-700 hover:text-orange-800 text-xs font-bold transition-all"
+                          >
+                            <Upload className="w-3 h-3" />
+                            Upload Fix
+                            {errorCount > 0 && (
+                              <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px]">
+                                {errorCount}
+                              </span>
+                            )}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleOpenReworkModal(row.error_list, {
+                              qaAgent: row.qa_agent,
+                              projectTask: row.project_task,
+                              evalDate: dateTime.date
+                            }, row.status, row.qc_id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-blue-100 border border-slate-200 hover:border-blue-300 rounded-lg text-slate-700 hover:text-blue-700 text-xs font-bold transition-all"
+                          >
+                            <FileSpreadsheet className="w-3 h-3" />
+                            View Errors
+                            {errorCount > 0 && (
+                              <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px]">
+                                {errorCount}
+                              </span>
+                            )}
+                          </button>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <span className={`px-3 py-1 rounded-lg font-semibold text-sm inline-block ${getStatusBadgeClass(row.status)}`}>
@@ -463,6 +554,52 @@ const AgentQCReport = () => {
 
             {/* Modal Body */}
             <div className="px-6 py-5 max-h-[calc(85vh-180px)] overflow-y-auto">
+              {/* File Upload Section - Only for Rework/Correction */}
+              {(selectedRecordInfo?.status?.toLowerCase() === 'rework' || selectedRecordInfo?.status?.toLowerCase() === 'correction') && (
+                <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                  <label className="block text-sm font-bold text-slate-700 mb-3">
+                    <div className="flex items-center gap-2">
+                      <Upload className="w-4 h-4 text-blue-600" />
+                      Upload Corrected File
+                      <span className="text-red-500">*</span>
+                    </div>
+                  </label>
+                  <div className="space-y-3">
+                    <div
+                      onClick={() => document.getElementById('rework-file-input').click()}
+                      className="relative border-2 border-dashed border-blue-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-100/50 transition-all"
+                    >
+                      <input
+                        id="rework-file-input"
+                        type="file"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                        accept="*/*"
+                      />
+                      {filePreview ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <File className="w-5 h-5 text-green-600" />
+                          <span className="text-sm font-semibold text-green-700">{filePreview}</span>
+                        </div>
+                      ) : (
+                        <>
+                          <Upload className="w-10 h-10 text-blue-400 mx-auto mb-2" />
+                          <p className="text-sm font-medium text-slate-600">Click to upload file</p>
+                          <p className="text-xs text-slate-500 mt-1">Maximum file size: 10MB</p>
+                        </>
+                      )}
+                    </div>
+                    {uploadError && (
+                      <p className="text-sm text-red-600 font-medium flex items-center gap-1">
+                        <AlertCircle className="w-4 h-4" />
+                        {uploadError}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Error List */}
               {selectedErrorList.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
@@ -510,12 +647,33 @@ const AgentQCReport = () => {
                     Total Errors: <span className="font-bold text-slate-900">{selectedErrorList.length}</span>
                   </span>
                 </div>
-                <button
-                  onClick={handleCloseErrorListModal}
-                  className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl transition-all shadow-md hover:shadow-lg"
-                >
-                  Close
-                </button>
+                <div className="flex items-center gap-3">
+                  {(selectedRecordInfo?.status?.toLowerCase() === 'rework' || selectedRecordInfo?.status?.toLowerCase() === 'correction') && (
+                    <button
+                      onClick={handleSubmitRework}
+                      disabled={!uploadedFile || submittingRework}
+                      className="px-6 py-2.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+                    >
+                      {submittingRework ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          Submit
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <button
+                    onClick={handleCloseErrorListModal}
+                    className="px-6 py-2.5 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white font-semibold rounded-xl transition-all shadow-md hover:shadow-lg"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
           </div>

@@ -6,7 +6,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { format } from "date-fns";
-import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RefreshCw, RotateCcw, Check, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RotateCcw, Check, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import api from "../../services/api";
 import { fetchProjectCategoryAFD, generateQCSample } from "../../services/qcService";
@@ -36,7 +36,11 @@ const QAAgentList = () => {
   
   // Tab state - read from URL parameter if available
   const subtabParam = searchParams.get('subtab');
-  const [activeTab, setActiveTab] = useState(subtabParam === 'qc_report' ? 'qc_report' : 'agent_files');
+  const [activeTab, setActiveTab] = useState(
+    subtabParam === 'qc_report' ? 'qc_report' : 
+    subtabParam === 'agent_rework_files' ? 'agent_rework_files' :
+    'agent_files'
+  );
   
   // Selected agent for split view
   const [selectedAgentId, setSelectedAgentId] = useState(null);
@@ -439,10 +443,10 @@ const QAAgentList = () => {
 
         {/* Tabs Navigation */}
         <div className="bg-white rounded-2xl shadow-lg mb-6 border border-slate-200 overflow-hidden">
-          <div className="flex border-b border-slate-200">
+          <div className="grid grid-cols-3 border-b border-slate-200">
             <button
               onClick={() => setActiveTab('agent_files')}
-              className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
+              className={`px-6 py-4 text-sm font-bold transition-all relative ${
                 activeTab === 'agent_files'
                   ? 'text-blue-600 bg-blue-50'
                   : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
@@ -458,7 +462,7 @@ const QAAgentList = () => {
             </button>
             <button
               onClick={() => setActiveTab('qc_report')}
-              className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
+              className={`px-6 py-4 text-sm font-bold transition-all relative ${
                 activeTab === 'qc_report'
                   ? 'text-blue-600 bg-blue-50'
                   : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
@@ -472,11 +476,27 @@ const QAAgentList = () => {
                 <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
               )}
             </button>
+            <button
+              onClick={() => setActiveTab('agent_rework_files')}
+              className={`px-6 py-4 text-sm font-bold transition-all relative ${
+                activeTab === 'agent_rework_files'
+                  ? 'text-blue-600 bg-blue-50'
+                  : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <RotateCcw className="w-4 h-4" />
+                <span>Agent's Rework & Correction File Report</span>
+              </div>
+              {activeTab === 'agent_rework_files' && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Split View Layout */}
-        {activeTab === 'agent_files' && (
+        {/* Split View Layout - Agent Files & Rework Files */}
+        {(activeTab === 'agent_files' || activeTab === 'agent_rework_files') && (
           <>
         <div className="bg-white rounded-2xl shadow-xl border-2 border-slate-200 overflow-hidden" style={{ height: 'calc(100vh - 400px)', minHeight: '600px' }}>
           {loading ? (
@@ -696,7 +716,13 @@ const QAAgentList = () => {
                                     <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
                                       <div className="flex items-center gap-2">
                                         <div className="w-2 h-2 bg-white rounded-full"></div>
-                                        Date & Time
+                                        Worked Date & Time
+                                      </div>
+                                    </th>
+                                    <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-white rounded-full"></div>
+                                        Evaluation Date & Time
                                       </div>
                                     </th>
                                     <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
@@ -714,57 +740,87 @@ const QAAgentList = () => {
                                     <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
                                       <div className="flex items-center justify-center gap-2">
                                         <div className="w-2 h-2 bg-white rounded-full"></div>
-                                        File
+                                        Status
                                       </div>
                                     </th>
                                     <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
                                       <div className="flex items-center justify-center gap-2">
                                         <div className="w-2 h-2 bg-white rounded-full"></div>
-                                        Action
+                                        QC Score
+                                      </div>
+                                    </th>
+                                    <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
+                                      <div className="flex items-center justify-center gap-2">
+                                        <div className="w-2 h-2 bg-white rounded-full"></div>
+                                        File
                                       </div>
                                     </th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                  {trackers.map((tracker, index) => (
+                                  {trackers.map((tracker, index) => {
+                                    // Helper function to format date and time
+                                    const formatDateTime = (timestamp) => {
+                                      if (!timestamp) return { date: '—', time: '—' };
+                                      const date = new Date(timestamp);
+                                      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                      const day = String(date.getUTCDate()).padStart(2, '0');
+                                      const month = monthNames[date.getUTCMonth()];
+                                      const year = date.getUTCFullYear();
+                                      let hours = date.getUTCHours();
+                                      const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+                                      const ampm = hours >= 12 ? 'PM' : 'AM';
+                                      hours = hours % 12 || 12;
+                                      return {
+                                        date: `${day}/${month}/${year}`,
+                                        time: `${hours}:${minutes} ${ampm}`
+                                      };
+                                    };
+
+                                    const workedDateTime = formatDateTime(tracker.date_time || tracker.tracker_datetime);
+                                    const evaluationDateTime = formatDateTime(tracker.evaluation_datetime);
+
+                                    // Helper function to get status badge classes
+                                    const getStatusBadgeClass = (status) => {
+                                      if (!status) return 'bg-slate-100 text-slate-700';
+                                      const statusLower = status.toLowerCase();
+                                      if (statusLower === 'regular' || statusLower === 'approved') return 'bg-green-100 text-green-800';
+                                      if (statusLower === 'rework') return 'bg-yellow-100 text-yellow-800';
+                                      if (statusLower === 'correction') return 'bg-red-100 text-red-800';
+                                      return 'bg-slate-100 text-slate-700';
+                                    };
+
+                                    // Helper function to get QC score color classes
+                                    const getQCScoreColorClass = (score) => {
+                                      if (score === null || score === undefined || score === '' || isNaN(Number(score))) return 'text-slate-700';
+                                      const numScore = Number(score);
+                                      if (numScore >= 95) return 'text-green-800 bg-green-100 font-bold';
+                                      if (numScore >= 80) return 'text-yellow-700 bg-yellow-100 font-bold';
+                                      return 'text-red-700 bg-red-200 font-bold';
+                                    };
+
+                                    return (
                                     <tr
                                       key={tracker.tracker_id || index}
                                       className={`transition-all duration-200 group ${
                                         index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
                                       } hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50`}
                                     >
+                                      {/* Worked Date & Time */}
                                       <td className="px-6 py-4 align-middle">
-                                        <div className="flex items-center gap-3">
-                                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200 shadow-sm">
-                                            <FileText className="w-5 h-5 text-blue-600" />
-                                          </div>
-                                          <div>
-                                            {tracker.date_time ? (() => {
-                                              const date = new Date(tracker.date_time);
-                                              const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                                              const day = date.getUTCDate();
-                                              const month = monthNames[date.getUTCMonth()];
-                                              const year = date.getUTCFullYear();
-                                              let hours = date.getUTCHours();
-                                              const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-                                              const ampm = hours >= 12 ? 'PM' : 'AM';
-                                              hours = hours % 12 || 12;
-                                              return (
-                                                <>
-                                                  <div className="font-bold text-slate-900 text-sm">{day} {month} {year}</div>
-                                                  <div className="text-xs text-slate-500 font-medium mt-0.5">
-                                                    <span className="bg-slate-100 px-2 py-0.5 rounded">
-                                                      {hours}:{minutes} {ampm}
-                                                    </span>
-                                                  </div>
-                                                </>
-                                              );
-                                            })() : (
-                                              <span className="text-slate-400">—</span>
-                                            )}
-                                          </div>
+                                        <div className="flex flex-col">
+                                          <span className="text-sm font-semibold text-slate-900">{workedDateTime.date}</span>
+                                          <span className="text-xs text-slate-600 mt-0.5">{workedDateTime.time}</span>
                                         </div>
                                       </td>
+                                      {/* Evaluation Date & Time */}
+                                      <td className="px-6 py-4 align-middle">
+                                        <div className="flex flex-col">
+                                          <span className="text-sm font-semibold text-slate-900">{evaluationDateTime.date}</span>
+                                          <span className="text-xs text-slate-600 mt-0.5">{evaluationDateTime.time}</span>
+                                        </div>
+                                      </td>
+                                      {/* Project */}
                                       <td className="px-6 py-4 align-middle">
                                         <div className="inline-flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100">
                                           <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
@@ -773,11 +829,25 @@ const QAAgentList = () => {
                                           </span>
                                         </div>
                                       </td>
+                                      {/* Task */}
                                       <td className="px-6 py-4 align-middle">
                                         <span className="text-slate-700 font-medium text-sm">
                                           {tracker.task_name || "—"}
                                         </span>
                                       </td>
+                                      {/* Status */}
+                                      <td className="px-6 py-4 align-middle text-center">
+                                        <span className={`px-3 py-1 rounded-lg font-semibold text-sm inline-block ${getStatusBadgeClass(tracker.status)}`}>
+                                          {tracker.status || '—'}
+                                        </span>
+                                      </td>
+                                      {/* QC Score */}
+                                      <td className="px-6 py-4 align-middle text-center">
+                                        <span className={`px-3 py-1 rounded-lg inline-block ${getQCScoreColorClass(tracker.qc_score)}`}>
+                                          {tracker.qc_score != null ? `${Number(tracker.qc_score).toFixed(2)}%` : '—'}
+                                        </span>
+                                      </td>
+                                      {/* File */}
                                       <td className="px-6 py-4 align-middle text-center">
                                         {tracker.tracker_file ? (
                                           <a
@@ -792,33 +862,12 @@ const QAAgentList = () => {
                                             <Download className="w-5 h-5 group-hover/download:scale-110 transition-transform" />
                                           </a>
                                         ) : (
-                                          <span className="text-slate-300 text-sm">No file</span>
+                                          <span className="text-slate-300 text-sm">—</span>
                                         )}
                                       </td>
-                                      <td className="px-6 py-4 align-middle text-center">
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleQCForm(tracker);
-                                          }}
-                                          disabled={qcFormLoading === tracker.tracker_id}
-                                          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-700 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed disabled:transform-none text-white text-sm font-bold rounded-xl transition-all duration-300 shadow-md hover:shadow-xl transform hover:scale-105 group/btn"
-                                        >
-                                          {qcFormLoading === tracker.tracker_id ? (
-                                            <>
-                                              <Loader2 className="w-4 h-4 animate-spin" />
-                                              <span>Loading...</span>
-                                            </>
-                                          ) : (
-                                            <>
-                                              <FileCheck className="w-4 h-4 group-hover/btn:rotate-12 transition-transform" />
-                                              <span>QC Form</span>
-                                            </>
-                                          )}
-                                        </button>
-                                      </td>
                                     </tr>
-                                  ))}
+                                  );
+                                  })}
                                 </tbody>
                               </table>
                             </div>
