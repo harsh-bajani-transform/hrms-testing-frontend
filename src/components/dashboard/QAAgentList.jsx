@@ -713,74 +713,112 @@ const QAAgentList = () => {
                               <table className="min-w-full">
                                 <thead className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 sticky top-0">
                                   <tr>
-                                    <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                        Worked Date & Time
-                                      </div>
-                                    </th>
-                                    <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                        Evaluation Date & Time
-                                      </div>
-                                    </th>
-                                    <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                        Project
-                                      </div>
-                                    </th>
-                                    <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                        Task
-                                      </div>
-                                    </th>
-                                    <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
-                                      <div className="flex items-center justify-center gap-2">
-                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                        Status
-                                      </div>
-                                    </th>
-                                    <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
-                                      <div className="flex items-center justify-center gap-2">
-                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                        QC Score
-                                      </div>
-                                    </th>
-                                    <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
-                                      <div className="flex items-center justify-center gap-2">
-                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                        File
-                                      </div>
-                                    </th>
+                                    {activeTab === 'agent_rework_files' ? (
+                                      <>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Worked Date & Time
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Evaluation Date & Time
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Project
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Task
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
+                                          <div className="flex items-center justify-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Status
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
+                                          <div className="flex items-center justify-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            QC Score
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
+                                          <div className="flex items-center justify-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            File
+                                          </div>
+                                        </th>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Date & Time
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Project
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Task
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
+                                          <div className="flex items-center justify-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            File
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
+                                          <div className="flex items-center justify-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Action
+                                          </div>
+                                        </th>
+                                      </>
+                                    )}
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                   {trackers.map((tracker, index) => {
-                                    // Helper function to format date and time
-                                    const formatDateTime = (timestamp) => {
-                                      if (!timestamp) return { date: '—', time: '—' };
-                                      const date = new Date(timestamp);
-                                      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                                      const day = String(date.getUTCDate()).padStart(2, '0');
-                                      const month = monthNames[date.getUTCMonth()];
-                                      const year = date.getUTCFullYear();
-                                      let hours = date.getUTCHours();
-                                      const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-                                      const ampm = hours >= 12 ? 'PM' : 'AM';
-                                      hours = hours % 12 || 12;
-                                      return {
-                                        date: `${day}/${month}/${year}`,
-                                        time: `${hours}:${minutes} ${ampm}`
-                                      };
+                                    // Helper function to format date/time
+                                    const formatDateTime = (dateTimeStr) => {
+                                      if (!dateTimeStr) return { date: '—', time: '—' };
+                                      try {
+                                        const date = new Date(dateTimeStr);
+                                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                        const day = date.getUTCDate();
+                                        const month = monthNames[date.getUTCMonth()];
+                                        const year = date.getUTCFullYear();
+                                        let hours = date.getUTCHours();
+                                        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+                                        const ampm = hours >= 12 ? 'PM' : 'AM';
+                                        hours = hours % 12 || 12;
+                                        return {
+                                          date: `${day} ${month} ${year}`,
+                                          time: `${hours}:${minutes} ${ampm}`
+                                        };
+                                      } catch {
+                                        return { date: '—', time: '—' };
+                                      }
                                     };
 
-                                    const workedDateTime = formatDateTime(tracker.date_time || tracker.tracker_datetime);
-                                    const evaluationDateTime = formatDateTime(tracker.evaluation_datetime);
-
-                                    // Helper function to get status badge classes
+                                    // Helper function to get status badge class
                                     const getStatusBadgeClass = (status) => {
                                       if (!status) return 'bg-slate-100 text-slate-700';
                                       const statusLower = status.toLowerCase();
@@ -790,14 +828,17 @@ const QAAgentList = () => {
                                       return 'bg-slate-100 text-slate-700';
                                     };
 
-                                    // Helper function to get QC score color classes
+                                    // Helper function to get QC score color class
                                     const getQCScoreColorClass = (score) => {
-                                      if (score === null || score === undefined || score === '' || isNaN(Number(score))) return 'text-slate-700';
+                                      if (score === null || score === undefined || score === '-' || isNaN(Number(score))) return 'text-slate-700 bg-slate-100';
                                       const numScore = Number(score);
                                       if (numScore >= 95) return 'text-green-800 bg-green-100 font-bold';
                                       if (numScore >= 80) return 'text-yellow-700 bg-yellow-100 font-bold';
-                                      return 'text-red-700 bg-red-200 font-bold';
+                                      return 'text-red-700 bg-red-100 font-bold';
                                     };
+
+                                    const workedDateTime = formatDateTime(tracker.date_time || tracker.tracker_datetime);
+                                    const evaluationDateTime = formatDateTime(tracker.qc_datetime || tracker.evaluation_datetime || tracker.qc_evaluation_date);
 
                                     return (
                                     <tr
@@ -806,65 +847,174 @@ const QAAgentList = () => {
                                         index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
                                       } hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50`}
                                     >
-                                      {/* Worked Date & Time */}
-                                      <td className="px-6 py-4 align-middle">
-                                        <div className="flex flex-col">
-                                          <span className="text-sm font-semibold text-slate-900">{workedDateTime.date}</span>
-                                          <span className="text-xs text-slate-600 mt-0.5">{workedDateTime.time}</span>
-                                        </div>
-                                      </td>
-                                      {/* Evaluation Date & Time */}
-                                      <td className="px-6 py-4 align-middle">
-                                        <div className="flex flex-col">
-                                          <span className="text-sm font-semibold text-slate-900">{evaluationDateTime.date}</span>
-                                          <span className="text-xs text-slate-600 mt-0.5">{evaluationDateTime.time}</span>
-                                        </div>
-                                      </td>
-                                      {/* Project */}
-                                      <td className="px-6 py-4 align-middle">
-                                        <div className="inline-flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100">
-                                          <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-                                          <span className="font-bold text-blue-700 text-sm">
-                                            {tracker.project_name || "—"}
-                                          </span>
-                                        </div>
-                                      </td>
-                                      {/* Task */}
-                                      <td className="px-6 py-4 align-middle">
-                                        <span className="text-slate-700 font-medium text-sm">
-                                          {tracker.task_name || "—"}
-                                        </span>
-                                      </td>
-                                      {/* Status */}
-                                      <td className="px-6 py-4 align-middle text-center">
-                                        <span className={`px-3 py-1 rounded-lg font-semibold text-sm inline-block ${getStatusBadgeClass(tracker.status)}`}>
-                                          {tracker.status || '—'}
-                                        </span>
-                                      </td>
-                                      {/* QC Score */}
-                                      <td className="px-6 py-4 align-middle text-center">
-                                        <span className={`px-3 py-1 rounded-lg inline-block ${getQCScoreColorClass(tracker.qc_score)}`}>
-                                          {tracker.qc_score != null ? `${Number(tracker.qc_score).toFixed(2)}%` : '—'}
-                                        </span>
-                                      </td>
-                                      {/* File */}
-                                      <td className="px-6 py-4 align-middle text-center">
-                                        {tracker.tracker_file ? (
-                                          <a
-                                            href={tracker.tracker_file}
-                                            download
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center justify-center w-12 h-12 text-green-600 hover:text-white bg-green-50 hover:bg-gradient-to-br hover:from-green-600 hover:to-emerald-600 transition-all duration-300 rounded-xl shadow-sm hover:shadow-lg group/download"
-                                            title="Download file"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            <Download className="w-5 h-5 group-hover/download:scale-110 transition-transform" />
-                                          </a>
-                                        ) : (
-                                          <span className="text-slate-300 text-sm">—</span>
-                                        )}
-                                      </td>
+                                      {activeTab === 'agent_rework_files' ? (
+                                        <>
+                                          {/* Worked Date & Time */}
+                                          <td className="px-6 py-4 align-middle">
+                                            <div className="flex items-center gap-3">
+                                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200 shadow-sm">
+                                                <FileText className="w-5 h-5 text-blue-600" />
+                                              </div>
+                                              <div>
+                                                <div className="font-bold text-slate-900 text-sm">{workedDateTime.date}</div>
+                                                <div className="text-xs text-slate-500 font-medium mt-0.5">
+                                                  <span className="bg-slate-100 px-2 py-0.5 rounded">
+                                                    {workedDateTime.time}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </td>
+                                          {/* Evaluation Date & Time */}
+                                          <td className="px-6 py-4 align-middle">
+                                            <div>
+                                              <div className="font-semibold text-slate-800 text-sm">{evaluationDateTime.date}</div>
+                                              <div className="text-xs text-slate-500 font-medium mt-0.5">
+                                                <span className="bg-blue-50 px-2 py-0.5 rounded">
+                                                  {evaluationDateTime.time}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </td>
+                                          {/* Project */}
+                                          <td className="px-6 py-4 align-middle">
+                                            <div className="inline-flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100">
+                                              <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                                              <span className="font-bold text-blue-700 text-sm">
+                                                {tracker.project_name || "—"}
+                                              </span>
+                                            </div>
+                                          </td>
+                                          {/* Task */}
+                                          <td className="px-6 py-4 align-middle">
+                                            <span className="text-slate-700 font-medium text-sm">
+                                              {tracker.task_name || "—"}
+                                            </span>
+                                          </td>
+                                          {/* Status */}
+                                          <td className="px-6 py-4 align-middle text-center">
+                                            <span className={`px-3 py-1.5 rounded-lg font-semibold text-sm inline-block ${getStatusBadgeClass(tracker.qc_status || tracker.status)}`}>
+                                              {tracker.qc_status || tracker.status || '—'}
+                                            </span>
+                                          </td>
+                                          {/* QC Score */}
+                                          <td className="px-6 py-4 align-middle text-center">
+                                            <span className={`px-3 py-1.5 rounded-lg inline-block text-sm font-bold ${getQCScoreColorClass(tracker.qc_score || tracker.score)}`}>
+                                              {(tracker.qc_score != null || tracker.score != null) ? `${Number(tracker.qc_score || tracker.score).toFixed(2)}%` : '—'}
+                                            </span>
+                                          </td>
+                                          {/* File */}
+                                          <td className="px-6 py-4 align-middle text-center">
+                                            {tracker.tracker_file ? (
+                                              <a
+                                                href={tracker.tracker_file}
+                                                download
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center justify-center w-12 h-12 text-green-600 hover:text-white bg-green-50 hover:bg-gradient-to-br hover:from-green-600 hover:to-emerald-600 transition-all duration-300 rounded-xl shadow-sm hover:shadow-lg group/download"
+                                                title="Download file"
+                                                onClick={(e) => e.stopPropagation()}
+                                              >
+                                                <Download className="w-5 h-5 group-hover/download:scale-110 transition-transform" />
+                                              </a>
+                                            ) : (
+                                              <span className="text-slate-300 text-sm">No file</span>
+                                            )}
+                                          </td>
+                                        </>
+                                      ) : (
+                                        <>
+                                          {/* Date & Time (Original design for agent_files tab) */}
+                                          <td className="px-6 py-4 align-middle">
+                                            <div className="flex items-center gap-3">
+                                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200 shadow-sm">
+                                                <FileText className="w-5 h-5 text-blue-600" />
+                                              </div>
+                                              <div>
+                                                {tracker.date_time ? (() => {
+                                                  const date = new Date(tracker.date_time);
+                                                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                                  const day = date.getUTCDate();
+                                                  const month = monthNames[date.getUTCMonth()];
+                                                  const year = date.getUTCFullYear();
+                                                  let hours = date.getUTCHours();
+                                                  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+                                                  const ampm = hours >= 12 ? 'PM' : 'AM';
+                                                  hours = hours % 12 || 12;
+                                                  return (
+                                                    <>
+                                                      <div className="font-bold text-slate-900 text-sm">{day} {month} {year}</div>
+                                                      <div className="text-xs text-slate-500 font-medium mt-0.5">
+                                                        <span className="bg-slate-100 px-2 py-0.5 rounded">
+                                                          {hours}:{minutes} {ampm}
+                                                        </span>
+                                                      </div>
+                                                    </>
+                                                  );
+                                                })() : (
+                                                  <span className="text-slate-400">—</span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </td>
+                                          {/* Project */}
+                                          <td className="px-6 py-4 align-middle">
+                                            <div className="inline-flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100">
+                                              <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                                              <span className="font-bold text-blue-700 text-sm">
+                                                {tracker.project_name || "—"}
+                                              </span>
+                                            </div>
+                                          </td>
+                                          {/* Task */}
+                                          <td className="px-6 py-4 align-middle">
+                                            <span className="text-slate-700 font-medium text-sm">
+                                              {tracker.task_name || "—"}
+                                            </span>
+                                          </td>
+                                          {/* File */}
+                                          <td className="px-6 py-4 align-middle text-center">
+                                            {tracker.tracker_file ? (
+                                              <a
+                                                href={tracker.tracker_file}
+                                                download
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center justify-center w-12 h-12 text-green-600 hover:text-white bg-green-50 hover:bg-gradient-to-br hover:from-green-600 hover:to-emerald-600 transition-all duration-300 rounded-xl shadow-sm hover:shadow-lg group/download"
+                                                title="Download file"
+                                                onClick={(e) => e.stopPropagation()}
+                                              >
+                                                <Download className="w-5 h-5 group-hover/download:scale-110 transition-transform" />
+                                              </a>
+                                            ) : (
+                                              <span className="text-slate-300 text-sm">No file</span>
+                                            )}
+                                          </td>
+                                          {/* Action */}
+                                          <td className="px-6 py-4 align-middle text-center">
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleQCForm(tracker);
+                                              }}
+                                              disabled={qcFormLoading === tracker.tracker_id}
+                                              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-700 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed disabled:transform-none text-white text-sm font-bold rounded-xl transition-all duration-300 shadow-md hover:shadow-xl transform hover:scale-105 group/btn"
+                                            >
+                                              {qcFormLoading === tracker.tracker_id ? (
+                                                <>
+                                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                                  <span>Loading...</span>
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <FileCheck className="w-4 h-4 group-hover/btn:rotate-12 transition-transform" />
+                                                  <span>QC Form</span>
+                                                </>
+                                              )}
+                                            </button>
+                                          </td>
+                                        </>
+                                      )}
                                     </tr>
                                   );
                                   })}
