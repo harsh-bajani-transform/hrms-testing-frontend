@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RotateCcw, Check, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import api from "../../services/api";
+import nodeApi from "../../services/nodeApi";
 import { fetchProjectCategoryAFD, generateQCSample } from "../../services/qcService";
 import { useAuth } from "../../context/AuthContext";
 import { useDeviceInfo } from "../../hooks/useDeviceInfo";
@@ -160,6 +161,18 @@ const QAAgentList = () => {
     fetchAllData();
   }, [user?.user_id, device_id, device_type]);
 
+  // Re-fetch data when tab changes and agent is selected
+  useEffect(() => {
+    if (selectedAgentId && (activeTab === 'agent_files' || activeTab === 'agent_rework_files')) {
+      if (activeTab === 'agent_rework_files') {
+        fetchReworkTrackers(selectedAgentId);
+      } else {
+        fetchAgentTrackers(selectedAgentId);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
   // Fetch tracker data for specific agent with date range
   const fetchAgentTrackers = async (agentId, startDate = null, endDate = null) => {
     setAgentLoading(true);
@@ -212,6 +225,55 @@ const QAAgentList = () => {
     }
   };
 
+  // Fetch rework tracker data for specific agent
+  const fetchReworkTrackers = async (agentId) => {
+    setAgentLoading(true);
+    try {
+      log('[QAAgentList] Fetching rework trackers for agent:', agentId);
+      
+      // Call Python backend API
+      const response = await api.post('/qc_rework/view_rework_trackers', {});
+      
+      const records = response.data?.data?.records || [];
+      
+      // Find the agent name for this agentId
+      const selectedAgent = agents.find(a => String(a.user_id) === String(agentId));
+      const agentName = selectedAgent?.user_name;
+      
+      // Filter records for this specific agent
+      const agentReworkTrackers = records
+        .filter(record => record.agent_name === agentName)
+        .map(record => ({
+          id: record.id,
+          agent_name: record.agent_name,
+          worked_datetime: record.worked_datetime,
+          evaluation_datetime: record.evaluation_datetime,
+          project_name: record.project_name,
+          task_name: record.task_name,
+          status: record.status,
+          qc_score: record.qc_score,
+          rework_file_path: record.rework_file_path,
+          // For compatibility with existing table code
+          date_time: record.worked_datetime,
+          qc_datetime: record.evaluation_datetime,
+          qc_status: record.status,
+          tracker_file: record.rework_file_path
+        }));
+      
+      log('[QAAgentList] Found rework trackers for agent:', agentReworkTrackers.length);
+      
+      setAgentTrackers(prev => ({
+        ...prev,
+        [agentId]: agentReworkTrackers
+      }));
+    } catch (error) {
+      logError("[QAAgentList] Error fetching rework trackers:", error);
+      toast.error("Failed to fetch rework tracker data");
+    } finally {
+      setAgentLoading(false);
+    }
+  };
+
   // Toggle agent card expansion
   const toggleAgent = (agentId) => {
     const isCurrentlyExpanded = expandedAgents[agentId];
@@ -258,6 +320,9 @@ const QAAgentList = () => {
 
   // Handle date changes for specific agent
   const handleAgentStartDateChange = (agentId, dateValue) => {
+    // Date filtering only works for agent_files tab
+    if (activeTab === 'agent_rework_files') return;
+    
     const currentFilters = agentDateFilters[agentId] || { startDate: getTodayDate(), endDate: getTodayDate() };
     const newFilters = {
       ...currentFilters,
@@ -274,6 +339,9 @@ const QAAgentList = () => {
   };
 
   const handleAgentEndDateChange = (agentId, dateValue) => {
+    // Date filtering only works for agent_files tab
+    if (activeTab === 'agent_rework_files') return;
+    
     const currentFilters = agentDateFilters[agentId] || { startDate: getTodayDate(), endDate: getTodayDate() };
     const newFilters = {
       ...currentFilters,
@@ -291,6 +359,9 @@ const QAAgentList = () => {
 
   // Reset filters for specific agent
   const handleResetAgentFilters = (agentId) => {
+    // Date filtering only works for agent_files tab
+    if (activeTab === 'agent_rework_files') return;
+    
     const today = getTodayDate();
     setAgentDateFilters(prev => ({
       ...prev,
@@ -592,7 +663,12 @@ const QAAgentList = () => {
                         key={agent.user_id}
                         onClick={() => {
                           setSelectedAgentId(agent.user_id);
-                          fetchAgentTrackers(agent.user_id);
+                          // Call appropriate API based on active tab
+                          if (activeTab === 'agent_rework_files') {
+                            fetchReworkTrackers(agent.user_id);
+                          } else {
+                            fetchAgentTrackers(agent.user_id);
+                          }
                         }}
                         disabled={agentLoading}
                         className={`w-full text-left p-4 rounded-xl transition-all duration-300 border-2 relative overflow-hidden ${
@@ -678,7 +754,8 @@ const QAAgentList = () => {
                         </div>
                       </div>
 
-                      {/* Date Filter */}
+                      {/* Date Filter - Only show for agent_files tab */}
+                      {activeTab === 'agent_files' && (
                       <div className="px-6 py-4 bg-white border-b-2 border-slate-200">
                         <div className="flex flex-wrap items-end gap-4">
                           <div className="flex-1 min-w-[320px]">
@@ -704,6 +781,7 @@ const QAAgentList = () => {
                           </button>
                         </div>
                       </div>
+                      )}
 
                       {/* Files Table */}
                       <div className="flex-1 overflow-y-auto p-6">

@@ -642,8 +642,10 @@ const QAAgentAudit = () => {
       try {
         console.log('[QAAgentAudit] Fetching QC audit report...');
 
-        // Call the Python API endpoint
-        const response = await api.post('/qc_audit/report');
+        // Call the Python API endpoint with user_id
+        const response = await api.post('/qc_audit/report', {
+          logged_in_user_id: user?.user_id
+        });
 
         console.log('[QAAgentAudit] Report API Response:', response.data);
 

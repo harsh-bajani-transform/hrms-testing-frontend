@@ -150,8 +150,10 @@ const QAIndividualAuditReport = () => {
 
         console.log('[QAIndividualAuditReport] Fetching QC audit report...');
 
-        // Call Python backend API
-        const response = await api.post('/qc_audit/report');
+        // Call Python backend API with user_id
+        const response = await api.post('/qc_audit/report', {
+          logged_in_user_id: user?.user_id
+        });
 
         console.log('[QAIndividualAuditReport] API Response:', response.data);
 

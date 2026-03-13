@@ -8,6 +8,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
 import nodeApi from '../../services/nodeApi';
+import api from '../../services/api';
 import * as XLSX from 'xlsx';
 import { 
   Download, 
@@ -85,7 +86,7 @@ const AgentQCReport = () => {
   };
 
   // Handle Rework/Correction Modal
-  const handleOpenReworkModal = (errorList, recordInfo, status, qcId) => {
+  const handleOpenReworkModal = (errorList, recordInfo, status, qcId, trackerId) => {
     // Modal can open for all statuses to view errors
     // File upload will only be available for rework/correction
 
@@ -103,8 +104,11 @@ const AgentQCReport = () => {
       parsedErrorList = [];
     }
     
+    // Get rework file path using tracker_id (matched from Python API)
+    const reworkFilePath = reworkFiles[trackerId] || null;
+    
     setSelectedErrorList(parsedErrorList);
-    setSelectedRecordInfo({ ...recordInfo, status, qcId });
+    setSelectedRecordInfo({ ...recordInfo, status, qcId, trackerId, reworkFilePath });
     setShowErrorListModal(true);
   };
 
@@ -141,7 +145,7 @@ const AgentQCReport = () => {
       return;
     }
 
-    if (!selectedRecordInfo?.qcId) {
+    if (!selectedRecordInfo?.trackerId) {
       toast.error('Invalid record information');
       return;
     }
@@ -151,13 +155,11 @@ const AgentQCReport = () => {
 
     try {
       const formData = new FormData();
-      formData.append('file', uploadedFile);
-      formData.append('qc_id', selectedRecordInfo.qcId);
-      formData.append('user_id', user?.user_id);
-      formData.append('status', selectedRecordInfo.status);
+      formData.append('tracker_id', selectedRecordInfo.trackerId);
+      formData.append('rework_file_path', uploadedFile);
 
-      // Submit to API (adjust endpoint as needed)
-      const response = await nodeApi.post('/qc-records/rework-upload', formData, {
+      // Submit to Python backend API
+      const response = await api.post('/qc_rework/add_rework_file', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -181,6 +183,7 @@ const AgentQCReport = () => {
   const [startDate, setStartDate] = useState(() => getTodayDate());
   const [endDate, setEndDate] = useState(() => getTodayDate());
   const [allQcData, setAllQcData] = useState([]);
+  const [reworkFiles, setReworkFiles] = useState({}); // Map of tracker_id -> rework_file_path
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showErrorListModal, setShowErrorListModal] = useState(false);
@@ -218,8 +221,6 @@ const AgentQCReport = () => {
       setError(null);
 
       try {
-        console.log('[AgentQCReport] Fetching QC data for user:', user?.user_id);
-
         // Call Node API to get ALL QC records (no date filtering on API)
         const response = await nodeApi.get('/qc-records/list', {
           params: {
@@ -227,16 +228,17 @@ const AgentQCReport = () => {
           }
         });
 
-        console.log('[AgentQCReport] API Response:', response.data);
-
         // Map API response to component format
         const records = response.data?.data || [];
         const mappedData = records.map(record => {
           return {
             qc_id: record.id,
+            tracker_id: record.tracker_id,
             evaluation_datetime: record.timestamp,
             qa_agent: record.qa_name || '-',
             project_task: `${record.project_name || '-'} / ${record.task_name || '-'}`,
+            project_name: record.project_name,
+            task_name: record.task_name,
             file_name: record.file_path,
             total_records: record.file_record_count,
             error_list: record.error_list,
@@ -246,6 +248,43 @@ const AgentQCReport = () => {
         });
 
         setAllQcData(mappedData);
+
+        // Fetch rework file data from Python API
+        try {
+          const reworkResponse = await api.post('/qc_rework/view_rework_trackers', { agent_id: parseInt(user?.user_id) });
+          const reworkRecords = reworkResponse.data?.data?.records || [];
+          
+          // Create a map using tracker_id (from Node API) -> rework_file_path
+          // Match Python records to Node records by project, task, and evaluation time
+          const reworkFileMap = {};
+          
+          reworkRecords.forEach(reworkRecord => {
+            if (reworkRecord.rework_file_path && reworkRecord.rework_file_path.trim()) {
+              // Find matching QC record by project_name, task_name, and timestamp
+              const matchingQcRecord = mappedData.find(qcRecord => {
+                const projectMatch = qcRecord.project_name === reworkRecord.project_name;
+                const taskMatch = qcRecord.task_name === reworkRecord.task_name;
+                
+                // Compare evaluation timestamps (allowing for timezone differences)
+                const qcTime = new Date(qcRecord.evaluation_datetime).getTime();
+                const reworkTime = new Date(reworkRecord.evaluation_datetime).getTime();
+                const timeDiff = Math.abs(qcTime - reworkTime);
+                const timeMatch = timeDiff < 21600000; // Within 6 hours (to handle timezone issues)
+                
+                return projectMatch && taskMatch && timeMatch;
+              });
+              
+              if (matchingQcRecord) {
+                reworkFileMap[matchingQcRecord.tracker_id] = reworkRecord.rework_file_path;
+              }
+            }
+          });
+          
+          setReworkFiles(reworkFileMap);
+        } catch (reworkErr) {
+          console.error('[AgentQCReport] Error fetching rework data:', reworkErr);
+          // Don't show error to user, just log it - rework data is optional
+        }
 
       } catch (err) {
         console.error('[AgentQCReport] Error fetching QC data:', err);
@@ -435,12 +474,13 @@ const AgentQCReport = () => {
                             onClick={() => handleOpenReworkModal(row.error_list, {
                               qaAgent: row.qa_agent,
                               projectTask: row.project_task,
-                              evalDate: dateTime.date
-                            }, row.status, row.qc_id)}
+                              evalDate: dateTime.date,
+                              trackerId: row.tracker_id
+                            }, row.status, row.qc_id, row.tracker_id)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-100 hover:bg-orange-200 border border-orange-300 hover:border-orange-400 rounded-lg text-orange-700 hover:text-orange-800 text-xs font-bold transition-all"
                           >
                             <Upload className="w-3 h-3" />
-                            Upload Fix
+                            {reworkFiles[row.tracker_id] ? 'View Fix' : 'Upload Fix'}
                             {errorCount > 0 && (
                               <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px]">
                                 {errorCount}
@@ -452,8 +492,9 @@ const AgentQCReport = () => {
                             onClick={() => handleOpenReworkModal(row.error_list, {
                               qaAgent: row.qa_agent,
                               projectTask: row.project_task,
-                              evalDate: dateTime.date
-                            }, row.status, row.qc_id)}
+                              evalDate: dateTime.date,
+                              trackerId: row.tracker_id
+                            }, row.status, row.qc_id, row.tracker_id)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-blue-100 border border-slate-200 hover:border-blue-300 rounded-lg text-slate-700 hover:text-blue-700 text-xs font-bold transition-all"
                           >
                             <FileSpreadsheet className="w-3 h-3" />
@@ -556,47 +597,75 @@ const AgentQCReport = () => {
             <div className="px-6 py-5 max-h-[calc(85vh-180px)] overflow-y-auto">
               {/* File Upload Section - Only for Rework/Correction */}
               {(selectedRecordInfo?.status?.toLowerCase() === 'rework' || selectedRecordInfo?.status?.toLowerCase() === 'correction') && (
-                <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
-                  <label className="block text-sm font-bold text-slate-700 mb-3">
-                    <div className="flex items-center gap-2">
-                      <Upload className="w-4 h-4 text-blue-600" />
-                      Upload Corrected File
-                      <span className="text-red-500">*</span>
+                (selectedRecordInfo?.reworkFilePath && selectedRecordInfo.reworkFilePath.trim()) ? (
+                  // File already uploaded - show message and download link
+                  <div className="mb-6 p-4 bg-green-50 border-2 border-green-200 rounded-xl">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="w-6 h-6 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-bold text-green-800 mb-1">File Already Uploaded</h4>
+                        <p className="text-sm text-green-700 mb-3">
+                          You have already submitted your corrected file for this rework/correction.
+                        </p>
+                        <a
+                          href={selectedRecordInfo.reworkFilePath}
+                          download={selectedRecordInfo.reworkFilePath.split('/').pop()}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-lg transition-all shadow-sm hover:shadow-md"
+                        >
+                          <Download className="w-4 h-4" />
+                          Download Uploaded File
+                        </a>
+                      </div>
                     </div>
-                  </label>
-                  <div className="space-y-3">
-                    <div
-                      onClick={() => document.getElementById('rework-file-input').click()}
-                      className="relative border-2 border-dashed border-blue-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-100/50 transition-all"
-                    >
-                      <input
-                        id="rework-file-input"
-                        type="file"
-                        onChange={handleFileUpload}
-                        className="hidden"
-                        accept="*/*"
-                      />
-                      {filePreview ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <File className="w-5 h-5 text-green-600" />
-                          <span className="text-sm font-semibold text-green-700">{filePreview}</span>
-                        </div>
-                      ) : (
-                        <>
-                          <Upload className="w-10 h-10 text-blue-400 mx-auto mb-2" />
-                          <p className="text-sm font-medium text-slate-600">Click to upload file</p>
-                          <p className="text-xs text-slate-500 mt-1">Maximum file size: 10MB</p>
-                        </>
+                  </div>
+                ) : (
+                  // File not uploaded yet - show upload form
+                  <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                    <label className="block text-sm font-bold text-slate-700 mb-3">
+                      <div className="flex items-center gap-2">
+                        <Upload className="w-4 h-4 text-blue-600" />
+                        Upload Corrected File
+                        <span className="text-red-500">*</span>
+                      </div>
+                    </label>
+                    <div className="space-y-3">
+                      <div
+                        onClick={() => document.getElementById('rework-file-input').click()}
+                        className="relative border-2 border-dashed border-blue-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-100/50 transition-all"
+                      >
+                        <input
+                          id="rework-file-input"
+                          type="file"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                          accept="*/*"
+                        />
+                        {filePreview ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <File className="w-5 h-5 text-green-600" />
+                            <span className="text-sm font-semibold text-green-700">{filePreview}</span>
+                          </div>
+                        ) : (
+                          <>
+                            <Upload className="w-10 h-10 text-blue-400 mx-auto mb-2" />
+                            <p className="text-sm font-medium text-slate-600">Click to upload file</p>
+                            <p className="text-xs text-slate-500 mt-1">Maximum file size: 10MB</p>
+                          </>
+                        )}
+                      </div>
+                      {uploadError && (
+                        <p className="text-sm text-red-600 font-medium flex items-center gap-1">
+                          <AlertCircle className="w-4 h-4" />
+                          {uploadError}
+                        </p>
                       )}
                     </div>
-                    {uploadError && (
-                      <p className="text-sm text-red-600 font-medium flex items-center gap-1">
-                        <AlertCircle className="w-4 h-4" />
-                        {uploadError}
-                      </p>
-                    )}
                   </div>
-                </div>
+                )
               )}
 
               {/* Error List */}
@@ -648,7 +717,7 @@ const AgentQCReport = () => {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  {(selectedRecordInfo?.status?.toLowerCase() === 'rework' || selectedRecordInfo?.status?.toLowerCase() === 'correction') && (
+                  {(selectedRecordInfo?.status?.toLowerCase() === 'rework' || selectedRecordInfo?.status?.toLowerCase() === 'correction') && !(selectedRecordInfo?.reworkFilePath && selectedRecordInfo.reworkFilePath.trim()) && (
                     <button
                       onClick={handleSubmitRework}
                       disabled={!uploadedFile || submittingRework}
