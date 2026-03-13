@@ -165,7 +165,9 @@ const QAAgentList = () => {
   useEffect(() => {
     if (selectedAgentId && (activeTab === 'agent_files' || activeTab === 'agent_rework_files')) {
       if (activeTab === 'agent_rework_files') {
-        fetchReworkTrackers(selectedAgentId);
+        // Fetch with date filter or default to today
+        const filters = agentDateFilters[selectedAgentId] || { startDate: getTodayDate(), endDate: getTodayDate() };
+        fetchReworkTrackers(selectedAgentId, filters.startDate, filters.endDate);
       } else {
         fetchAgentTrackers(selectedAgentId);
       }
@@ -225,8 +227,8 @@ const QAAgentList = () => {
     }
   };
 
-  // Fetch rework tracker data for specific agent
-  const fetchReworkTrackers = async (agentId) => {
+  // Fetch rework tracker data for specific agent with date range (frontend filtering)
+  const fetchReworkTrackers = async (agentId, startDate = null, endDate = null) => {
     setAgentLoading(true);
     try {
       log('[QAAgentList] Fetching rework trackers for agent:', agentId);
@@ -241,7 +243,7 @@ const QAAgentList = () => {
       const agentName = selectedAgent?.user_name;
       
       // Filter records for this specific agent
-      const agentReworkTrackers = records
+      let agentReworkTrackers = records
         .filter(record => record.agent_name === agentName)
         .map(record => ({
           id: record.id,
@@ -259,6 +261,27 @@ const QAAgentList = () => {
           qc_status: record.status,
           tracker_file: record.rework_file_path
         }));
+      
+      // Frontend date filtering if dates are provided
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        
+        agentReworkTrackers = agentReworkTrackers.filter(tracker => {
+          // Use worked_datetime for filtering
+          const trackerDate = new Date(tracker.worked_datetime);
+          return trackerDate >= start && trackerDate <= end;
+        });
+        
+        log('[QAAgentList] Filtered rework trackers by date:', {
+          startDate,
+          endDate,
+          totalRecords: records.length,
+          filteredRecords: agentReworkTrackers.length
+        });
+      }
       
       log('[QAAgentList] Found rework trackers for agent:', agentReworkTrackers.length);
       
@@ -285,7 +308,13 @@ const QAAgentList = () => {
     
     // If expanding (not currently expanded), fetch fresh data
     if (!isCurrentlyExpanded) {
-      fetchAgentTrackers(agentId);
+      if (activeTab === 'agent_rework_files') {
+        // Fetch rework data with date filter or default to today
+        const filters = agentDateFilters[agentId] || { startDate: getTodayDate(), endDate: getTodayDate() };
+        fetchReworkTrackers(agentId, filters.startDate, filters.endDate);
+      } else {
+        fetchAgentTrackers(agentId);
+      }
     }
   };
 
@@ -320,9 +349,6 @@ const QAAgentList = () => {
 
   // Handle date changes for specific agent
   const handleAgentStartDateChange = (agentId, dateValue) => {
-    // Date filtering only works for agent_files tab
-    if (activeTab === 'agent_rework_files') return;
-    
     const currentFilters = agentDateFilters[agentId] || { startDate: getTodayDate(), endDate: getTodayDate() };
     const newFilters = {
       ...currentFilters,
@@ -335,13 +361,14 @@ const QAAgentList = () => {
     }));
     
     // Fetch updated data with new dates immediately
-    fetchAgentTrackers(agentId, newFilters.startDate, newFilters.endDate);
+    if (activeTab === 'agent_rework_files') {
+      fetchReworkTrackers(agentId, newFilters.startDate, newFilters.endDate);
+    } else {
+      fetchAgentTrackers(agentId, newFilters.startDate, newFilters.endDate);
+    }
   };
 
   const handleAgentEndDateChange = (agentId, dateValue) => {
-    // Date filtering only works for agent_files tab
-    if (activeTab === 'agent_rework_files') return;
-    
     const currentFilters = agentDateFilters[agentId] || { startDate: getTodayDate(), endDate: getTodayDate() };
     const newFilters = {
       ...currentFilters,
@@ -354,21 +381,26 @@ const QAAgentList = () => {
     }));
     
     // Fetch updated data with new dates immediately
-    fetchAgentTrackers(agentId, newFilters.startDate, newFilters.endDate);
+    if (activeTab === 'agent_rework_files') {
+      fetchReworkTrackers(agentId, newFilters.startDate, newFilters.endDate);
+    } else {
+      fetchAgentTrackers(agentId, newFilters.startDate, newFilters.endDate);
+    }
   };
 
   // Reset filters for specific agent
   const handleResetAgentFilters = (agentId) => {
-    // Date filtering only works for agent_files tab
-    if (activeTab === 'agent_rework_files') return;
-    
     const today = getTodayDate();
     setAgentDateFilters(prev => ({
       ...prev,
       [agentId]: { startDate: today, endDate: today }
     }));
     // Fetch updated data with today's date immediately
-    fetchAgentTrackers(agentId, today, today);
+    if (activeTab === 'agent_rework_files') {
+      fetchReworkTrackers(agentId, today, today);
+    } else {
+      fetchAgentTrackers(agentId, today, today);
+    }
   };
 
   // Handle QC Form action
@@ -663,9 +695,18 @@ const QAAgentList = () => {
                         key={agent.user_id}
                         onClick={() => {
                           setSelectedAgentId(agent.user_id);
+                          // Initialize date filter to today if not set
+                          if (!agentDateFilters[agent.user_id]) {
+                            const today = getTodayDate();
+                            setAgentDateFilters(prev => ({
+                              ...prev,
+                              [agent.user_id]: { startDate: today, endDate: today }
+                            }));
+                          }
                           // Call appropriate API based on active tab
                           if (activeTab === 'agent_rework_files') {
-                            fetchReworkTrackers(agent.user_id);
+                            const filters = agentDateFilters[agent.user_id] || { startDate: getTodayDate(), endDate: getTodayDate() };
+                            fetchReworkTrackers(agent.user_id, filters.startDate, filters.endDate);
                           } else {
                             fetchAgentTrackers(agent.user_id);
                           }
@@ -754,8 +795,8 @@ const QAAgentList = () => {
                         </div>
                       </div>
 
-                      {/* Date Filter - Only show for agent_files tab */}
-                      {activeTab === 'agent_files' && (
+                      {/* Date Filter - Show for both agent_files and agent_rework_files tabs */}
+                      {(activeTab === 'agent_files' || activeTab === 'agent_rework_files') && (
                       <div className="px-6 py-4 bg-white border-b-2 border-slate-200">
                         <div className="flex flex-wrap items-end gap-4">
                           <div className="flex-1 min-w-[320px]">
