@@ -4,11 +4,13 @@
  * Description: QC Form Report View - Displays QC evaluation records with detailed metrics
  */
 import React, { useState, useMemo, useEffect } from "react";
-import { FileCheck, Calendar, Users, Award, AlertCircle, CheckCircle2, Download, Search, X, Filter, RotateCcw, XCircle } from "lucide-react";
+import { FileCheck, Calendar, Users, Award, AlertCircle, CheckCircle2, Download, Search, X, Filter, RotateCcw, XCircle, FileSpreadsheet } from "lucide-react";
 import { DateRangePicker } from "../common/CustomCalendar";
 import SearchableSelect from "../common/SearchableSelect";
 import { useAuth } from "../../context/AuthContext";
 import { getQCRecordsList } from "../../services/qcService";
+import * as XLSX from 'xlsx';
+import { toast } from 'react-hot-toast';
 
 const QCFormReportView = () => {
   const { user } = useAuth();
@@ -47,7 +49,9 @@ const QCFormReportView = () => {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all"); // all, Regular, Rework
-  const [selectedErrors, setSelectedErrors] = useState(null);
+  const [showErrorListModal, setShowErrorListModal] = useState(false);
+  const [selectedErrorList, setSelectedErrorList] = useState([]);
+  const [selectedRecordInfo, setSelectedRecordInfo] = useState(null);
   const [startDate, setStartDate] = useState(getTodayDate());
   const [endDate, setEndDate] = useState(getTodayDate());
 
@@ -130,67 +134,244 @@ const QCFormReportView = () => {
     setEndDate(getTodayDate());
   };
 
+  // Export to Excel function
+  const handleExportToExcel = () => {
+    try {
+      if (filteredReports.length === 0) {
+        toast.error('No data to export');
+        return;
+      }
+
+      // Calculate summary statistics
+      const totalRecords = filteredReports.length;
+      const totalQCRecords = filteredReports.reduce((sum, report) => {
+        return sum + (report['10%_qc_file_records'] || report['10%_data_generated_count'] || 0);
+      }, 0);
+      const avgScore = filteredReports.length > 0 
+        ? (filteredReports.reduce((sum, r) => sum + parseFloat(r.qc_score || 0), 0) / filteredReports.length).toFixed(2)
+        : 0;
+
+      // Prepare summary data
+      const summaryData = [
+        { 'Summary': 'Total Records', 'Value': `${totalRecords} Records` },
+        { 'Summary': 'Total QC Records', 'Value': totalQCRecords },
+        { 'Summary': 'Avg Score', 'Value': `${avgScore}%` },
+        {}, // Empty row for spacing
+      ];
+
+      // Prepare data for export
+      const exportData = filteredReports.map((report) => {
+        // Format evaluation date & time
+        const evalDateTime = report.timestamp ? formatDateTime(report.timestamp) : { date: "N/A", time: "N/A" };
+        const evaluationDateTime = `${evalDateTime.date} ${evalDateTime.time}`;
+        
+        // Format work date
+        const workDate = report.date_of_file_submission ? formatDate(report.date_of_file_submission) : "N/A";
+        
+        // Parse error list
+        let errorList = [];
+        try {
+          errorList = typeof report.error_list === 'string' ? JSON.parse(report.error_list) : (report.error_list || []);
+        } catch (e) {
+          errorList = [];
+        }
+        
+        // Format error list as multi-line string for single cell
+        const errorListString = errorList.length > 0 
+          ? errorList.map((error, idx) => {
+              // Extract error text properly from object or string
+              const errorLabel = typeof error === 'object' 
+                ? (error.error || error.name || error.message || error.error_name || JSON.stringify(error)) 
+                : String(error);
+              return `${idx + 1}. ${errorLabel}`;
+            }).join('\n')
+          : 'No errors';
+        
+        return {
+          'Evaluation Date & Time': evaluationDateTime,
+          'Work Date': workDate,
+          'Assistant Manager': report.am_name || 'N/A',
+          'QA Agent': report.qa_name || 'N/A',
+          'Agent': report.agent_name || 'N/A',
+          'Project': report.project_name || 'N/A',
+          'Task': report.task_name || 'N/A',
+          'Total Record': report.file_record_count || 0,
+          'QC Record': report['10%_qc_file_records'] || report['10%_data_generated_count'] || 0,
+          'Errors Count': errorList.length,
+          'Error List': errorListString,
+          'Status': report.status || 'N/A',
+          'QC Score': report.qc_score || 0
+        };
+      });
+
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+      
+      // Create worksheet with summary first, then data
+      const worksheet = XLSX.utils.json_to_sheet(summaryData);
+      
+      // Append the main data table below the summary
+      XLSX.utils.sheet_add_json(worksheet, exportData, { origin: -1, skipHeader: false });
+
+      // Set column widths
+      worksheet['!cols'] = [
+        { wch: 20 }, // Evaluation Date & Time / Summary
+        { wch: 20 }, // Work Date / Value
+        { wch: 20 }, // Assistant Manager
+        { wch: 20 }, // QA Agent
+        { wch: 20 }, // Agent
+        { wch: 25 }, // Project
+        { wch: 30 }, // Task
+        { wch: 12 }, // Total Record
+        { wch: 12 }, // QC Record
+        { wch: 12 }, // Errors Count
+        { wch: 50 }, // Error List
+        { wch: 12 }, // Status
+        { wch: 10 }  // QC Score
+      ];
+
+      // Enable text wrapping for Error List column
+      const range = XLSX.utils.decode_range(worksheet['!ref']);
+      for (let row = range.s.r + 1; row <= range.e.r; row++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: 10 }); // Column K (Error List)
+        if (worksheet[cellAddress]) {
+          worksheet[cellAddress].s = { alignment: { wrapText: true, vertical: 'top' } };
+        }
+      }
+
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'QC Form Report');
+
+      // Generate filename with date range
+      const filename = `QC_Form_Report_${startDate}_to_${endDate}.xlsx`;
+
+      // Download file
+      XLSX.writeFile(workbook, filename);
+
+      toast.success(`Exported ${filteredReports.length} records successfully!`);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export data');
+    }
+  };
+
   const getScoreColor = (score) => {
     if (score > 98) return "text-green-700 bg-green-50 border-green-200";
     if (score >= 95) return "text-yellow-700 bg-yellow-50 border-yellow-200";
     return "text-red-700 bg-red-50 border-red-200";
   };
 
+  // Handle Error List Modal
+  const handleOpenErrorListModal = (errorList, recordInfo) => {
+    // Ensure errorList is always an array
+    let parsedErrorList = [];
+    
+    try {
+      if (typeof errorList === 'string') {
+        parsedErrorList = JSON.parse(errorList);
+      } else if (Array.isArray(errorList)) {
+        parsedErrorList = errorList;
+      }
+    } catch (e) {
+      console.error('[QCFormReportView] Error parsing error list:', e);
+      parsedErrorList = [];
+    }
+    
+    setSelectedErrorList(parsedErrorList);
+    setSelectedRecordInfo(recordInfo);
+    setShowErrorListModal(true);
+  };
+
+  const handleCloseErrorListModal = () => {
+    setShowErrorListModal(false);
+    setSelectedErrorList([]);
+    setSelectedRecordInfo(null);
+  };
+
   const renderErrorListModal = () => {
-    if (!selectedErrors) return null;
+    if (!showErrorListModal) return null;
     
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-red-50 to-orange-50">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <AlertCircle className="w-5 h-5 text-blue-600" />
+              <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center shadow-sm">
+                <AlertCircle className="w-6 h-6 text-red-600" />
               </div>
-              <h3 className="font-bold text-slate-800 text-lg">Error List</h3>
+              <div>
+                <h3 className="font-bold text-slate-900 text-lg">Error List</h3>
+                {selectedRecordInfo && (
+                  <p className="text-sm text-slate-600 font-medium mt-0.5">
+                    {selectedRecordInfo.agentName} • {selectedRecordInfo.projectName}
+                  </p>
+                )}
+              </div>
             </div>
             <button
-              onClick={() => setSelectedErrors(null)}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-all"
+              onClick={handleCloseErrorListModal}
+              className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 hover:bg-white/50 transition-all shadow-sm hover:shadow"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
-          <div className="px-6 py-4 max-h-[calc(80vh-80px)] overflow-y-auto">
-            <ul className="space-y-3">
-              {(() => {
-                const report = qcReports.find(r => r.id === selectedErrors);
-                if (!report) return null;
-                let eList = [];
-                try {
-                  eList = typeof report.error_list === 'string' ? JSON.parse(report.error_list) : (report.error_list || []);
-                } catch (e) {
-                  console.error("Error parsing error_list", e);
-                }
-                
-                if (eList.length === 0) {
-                  return <li className="text-sm text-slate-500 italic">No errors logged.</li>;
-                }
 
-                return eList.map((error, idx) => {
-                  const errorLabel = typeof error === 'object' ? (error.error || error.name || JSON.stringify(error)) : error;
+          {/* Modal Body */}
+          <div className="px-6 py-5 max-h-[calc(85vh-180px)] overflow-y-auto">
+            {selectedErrorList.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                  <CheckCircle2 className="w-8 h-8 text-green-600" />
+                </div>
+                <p className="text-slate-600 font-semibold text-lg">No errors found</p>
+                <p className="text-slate-500 text-sm mt-1">This record has a clean evaluation</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {selectedErrorList.map((error, index) => {
+                  const errorLabel = typeof error === 'object' 
+                    ? (error.error || error.name || error.message || JSON.stringify(error)) 
+                    : String(error);
+                  
                   return (
-                    <li key={idx} className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                      <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
-                      <span className="text-sm text-slate-700 font-medium">{errorLabel}</span>
-                    </li>
-                  )
-                });
-              })()}
-            </ul>
+                    <div
+                      key={index}
+                      className="flex items-start gap-4 p-4 bg-red-50 border-2 border-red-200 rounded-xl hover:bg-red-100 hover:border-red-300 transition-all group"
+                    >
+                      <div className="flex items-center justify-center w-8 h-8 bg-red-200 rounded-lg shrink-0 mt-0.5 group-hover:bg-red-300 transition-all">
+                        <span className="text-red-700 font-bold text-sm">#{index + 1}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start gap-3">
+                          <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
+                          <p className="text-sm text-slate-800 font-medium leading-relaxed break-words">
+                            {errorLabel}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
+
+          {/* Modal Footer */}
           <div className="px-6 py-4 border-t border-slate-200 bg-slate-50">
-            <button
-              onClick={() => setSelectedErrors(null)}
-              className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all"
-            >
-              Close
-            </button>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-sm text-slate-600">
+                <AlertCircle className="w-4 h-4" />
+                <span className="font-medium">
+                  Total Errors: <span className="font-bold text-slate-900">{selectedErrorList.length}</span>
+                </span>
+              </div>
+              <button
+                onClick={handleCloseErrorListModal}
+                className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl transition-all shadow-md hover:shadow-lg"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -258,7 +439,9 @@ const QCFormReportView = () => {
 
             {/* Export Button */}
             <button 
-              className="inline-flex items-center gap-2 px-4 py-3 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200" 
+              onClick={handleExportToExcel}
+              disabled={loading || filteredReports.length === 0}
+              className="inline-flex items-center gap-2 px-4 py-3 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200" 
               title="Export filtered data to Excel"
             >
               <Download className="w-4 h-4" />
@@ -458,11 +641,21 @@ const QCFormReportView = () => {
                       {/* Error List */}
                       <td className="px-4 py-4 align-middle">
                         <button
-                          onClick={() => setSelectedErrors(selectedErrors === report.id ? null : report.id)}
-                          className="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-blue-100 border border-slate-200 hover:border-blue-300 rounded-lg text-slate-700 hover:text-blue-700 text-xs font-bold transition-all"
+                          onClick={() => handleOpenErrorListModal(eList, {
+                            agentName: agentName,
+                            projectName: projectName,
+                            taskName: taskName,
+                            evalDate: evalDateTime.date
+                          })}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-blue-100 border border-slate-200 hover:border-blue-300 rounded-lg text-slate-700 hover:text-blue-700 text-xs font-bold transition-all"
                         >
-                          <AlertCircle className="w-3 h-3" />
-                          View ({errorCount})
+                          <FileSpreadsheet className="w-3 h-3" />
+                          View
+                          {errorCount > 0 && (
+                            <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px]">
+                              {errorCount}
+                            </span>
+                          )}
                         </button>
                       </td>
 

@@ -10,7 +10,7 @@ import SearchableSelect from "./SearchableSelect";
 import { fetchMonthlyBillableReport } from "../../services/billableReportService";
 import api from "../../services/api";
 import { useDeviceInfo } from "../../hooks/useDeviceInfo";
-import { Users, Calendar, Download, RotateCcw, FileText, BarChart3 } from "lucide-react";
+import { Users, Calendar, Download, RotateCcw } from "lucide-react";
 import { Calendar as CalendarComponent } from "../ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { format } from "date-fns";
@@ -193,8 +193,11 @@ const BillableReport = ({ userId }) => {
         const totalBillable = exportData.reduce((sum, r) => sum + (parseFloat(r['Billable Hour Delivered']) || 0), 0);
         const totalGoal = exportData.reduce((sum, r) => sum + (parseFloat(r['Monthly Goal']) || 0), 0);
         const totalPending = exportData.reduce((sum, r) => sum + (parseFloat(r['Pending Target']) || 0), 0);
-        // For Avg. QC Score, show average if all are numbers
-        const qcScores = exportData.map(r => Number(r['Avg. QC Score'])).filter(v => !isNaN(v));
+        // For Avg. QC Score, show average if all are numbers (exclude null, empty, undefined)
+        const qcScores = exportData
+          .filter(r => r['Avg. QC Score'] !== null && r['Avg. QC Score'] !== undefined && r['Avg. QC Score'] !== '' && r['Avg. QC Score'] !== '-')
+          .map(r => parseFloat(r['Avg. QC Score']))
+          .filter(v => !isNaN(v));
         const avgQC = qcScores.length > 0 ? `${(qcScores.reduce((a, b) => a + b, 0) / qcScores.length).toFixed(2)}%` : '-';
         
         const totalRow = {
@@ -698,39 +701,19 @@ const BillableReport = ({ userId }) => {
         </div>
 
         {/* Tabs */}
-        <div className="bg-white rounded-2xl shadow-lg mb-6 border border-slate-200 overflow-hidden">
-          <div className="flex border-b border-slate-200">
+        <div className="bg-white rounded-xl shadow-md border-2 border-blue-100 p-6">
+          <div className="flex items-center gap-2">
             <button
+              className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all duration-300 border-2 ${activeToggle === 'daily' ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md border-blue-700' : 'text-blue-700 hover:bg-blue-50 border-blue-200 hover:border-blue-400'}`}
               onClick={() => setActiveToggle('daily')}
-              className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
-                activeToggle === 'daily'
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
-              }`}
             >
-              <div className="flex items-center justify-center gap-2">
-                <FileText className="w-4 h-4" />
-                <span>Daily Report</span>
-              </div>
-              {activeToggle === 'daily' && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
-              )}
+              Daily Report
             </button>
             <button
+              className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all duration-300 border-2 ${activeToggle === 'monthly' ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md border-blue-700' : 'text-blue-700 hover:bg-blue-50 border-blue-200 hover:border-blue-400'}`}
               onClick={() => setActiveToggle('monthly')}
-              className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
-                activeToggle === 'monthly'
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
-              }`}
             >
-              <div className="flex items-center justify-center gap-2">
-                <BarChart3 className="w-4 h-4" />
-                <span>Monthly Report</span>
-              </div>
-              {activeToggle === 'monthly' && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
-              )}
+              Monthly Report
             </button>
           </div>
         </div>

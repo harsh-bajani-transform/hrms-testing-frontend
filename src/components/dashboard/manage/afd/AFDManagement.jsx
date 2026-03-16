@@ -21,8 +21,8 @@ const AFDManagement = () => {
     {
       id: Date.now(),
       name: '',
-      score: 0,
-      subCategories: [{ id: Date.now(), name: '', score: 0 }]
+      score: '',
+      subCategories: [{ id: Date.now(), name: '', score: '' }]
     }
   ]);
 
@@ -69,8 +69,8 @@ const AFDManagement = () => {
       {
         id: Date.now(),
         name: '',
-        score: 0,
-        subCategories: [{ id: Date.now() + 1, name: '', score: 0 }]
+        score: '',
+        subCategories: [{ id: Date.now() + 1, name: '', score: '' }]
       }
     ]);
   };
@@ -124,7 +124,7 @@ const AFDManagement = () => {
   const addSubCategory = (categoryId) => {
     setCategories(categories.map(cat =>
       cat.id === categoryId
-        ? { ...cat, subCategories: [...cat.subCategories, { id: Date.now(), name: '', score: 0 }] }
+        ? { ...cat, subCategories: [...cat.subCategories, { id: Date.now(), name: '', score: '' }] }
         : cat
     ));
   };
@@ -257,8 +257,8 @@ const AFDManagement = () => {
       {
         id: Date.now(),
         name: '',
-        score: 0,
-        subCategories: [{ id: Date.now() + 1, name: '', score: 0 }]
+        score: '',
+        subCategories: [{ id: Date.now() + 1, name: '', score: '' }]
       }
     ]);
     setEditingRecordId(null);
@@ -417,14 +417,12 @@ const AFDManagement = () => {
                         Category Score <span className="text-red-600">*</span>
                       </label>
                       <input
-                        type="number"
+                        type="text"
                         value={category.score}
                         onChange={(e) => updateCategory(category.id, 'score', e.target.value)}
                         onFocus={(e) => e.target.select()}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                         placeholder="Score"
-                        min="0"
-                        max="100"
                       />
                     </div>
                   </div>
@@ -466,14 +464,12 @@ const AFDManagement = () => {
                           placeholder="Subcategory name"
                         />
                         <input
-                          type="number"
+                          type="text"
                           value={subCategory.score}
                           onChange={(e) => updateSubCategory(category.id, subCategory.id, 'score', e.target.value)}
                           onFocus={(e) => e.target.select()}
                           className="px-3 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                           placeholder="Score"
-                          min="0"
-                          max="100"
                         />
                       </div>
                       <button

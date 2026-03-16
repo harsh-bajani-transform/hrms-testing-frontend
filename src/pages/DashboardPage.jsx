@@ -3,7 +3,7 @@
 import Tracker from '../components/AgentDashboard/Tracker';
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Settings, Lock } from 'lucide-react';
+import { Settings, Lock, File } from 'lucide-react';
 import { MONTHLY_GOAL, SHIFT_START_HOUR, SHIFT_HOURS_COUNT } from '../utils/constants';
 import { isWithinRange, getComparisonRange } from '../utils/dateHelpers';
 import FilterBar from '../components/dashboard/FilterBar';
@@ -24,6 +24,7 @@ import AgentBillableReport from '../components/AgentDashboard/AgentBillableRepor
 // Import the split admin components
 import UsersManagement from '../components/dashboard/manage/user/UsersManagement';
 import ProjectsManagement from '../components/dashboard/manage/project/ProjectsManagement';
+import AFDManagement from '../components/dashboard/manage/afd/AFDManagement';
 import ProjectCategory from '../components/dashboard/manage/category/ProjectCategory';
 import UserTrackingView from '../components/common/UserTrackingView';
 import { fetchUsersList } from '../services/authService';
@@ -425,6 +426,19 @@ const DashboardPage = ({
                   Projects & Targets
                 </button>
               )}
+              {/* AFD Management tab */}
+              {(isAssistantManager || canManageProjects) && (
+                <button 
+                  onClick={() => setAdminActiveTab('afd')}
+                  className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${
+                    adminActiveTab === 'afd' 
+                      ? 'border-blue-600 text-blue-700' 
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  AFD Management
+                </button>
+              )}
               {/* Project Category tab */}
               <button 
                 onClick={() => setAdminActiveTab('category')}
@@ -522,6 +536,10 @@ const DashboardPage = ({
                   </div>
                 </div>
               )
+            )}
+            
+            {adminActiveTab === 'afd' && (
+              <AFDManagement />
             )}
             
             {adminActiveTab === 'category' && (

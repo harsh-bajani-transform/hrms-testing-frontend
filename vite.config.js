@@ -78,7 +78,8 @@ export default defineConfig(({ mode }) => {
           secure: false,
         },
 
-        "/dashboard": {
+        // Only proxy dashboard API endpoints, not the frontend route
+        "^/dashboard/(filter|api)": {
           target: apiBaseURL,
 
           changeOrigin: true,

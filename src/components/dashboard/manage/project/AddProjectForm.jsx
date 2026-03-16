@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
 import AddProjectFormModal from './AddProjectFormModal';
+import { useAuth } from '../../../../context/AuthContext';
 
 const AddProjectForm = ({
      newProject,
@@ -30,13 +31,30 @@ const AddProjectForm = ({
      projectNameSearch = "",
      setProjectNameSearch
 }) => {
+     const { user } = useAuth();
      const [showModal, setShowModal] = useState(false);
+     
+     // Get user_id from context or sessionStorage
+     const getUserId = () => {
+          if (user?.user_id) return user.user_id;
+          
+          try {
+               const storedUser = sessionStorage.getItem('user');
+               if (storedUser) {
+                    const parsed = JSON.parse(storedUser);
+                    return parsed?.user_id || parsed?.id;
+               }
+          } catch (e) {
+               console.error('[AddProjectForm] Failed to parse user from sessionStorage:', e);
+          }
+          return null;
+     };
 
      // Open edit modal when edit mode changes, only if dropdowns are loaded and not empty
      useEffect(() => {
           const openEditModalWithData = async () => {
                if (showEditModal) {
-                    await loadDropdowns();
+                    await loadDropdowns(getUserId());
                     setShowModal(true);
                }
           };
@@ -44,7 +62,7 @@ const AddProjectForm = ({
      }, [showEditModal, loadDropdowns]);
 
      const openModal = async () => {
-          await loadDropdowns(); // 🔥 API CALL HERE
+          await loadDropdowns(getUserId()); // 🔥 API CALL HERE - Now with userId
           setShowModal(true);
      };
 

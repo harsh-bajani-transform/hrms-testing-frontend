@@ -4,13 +4,15 @@
  * Description: QA Agent List - Shows assigned agents with their tracker data (files only)
  */
 import React, { useEffect, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { format } from "date-fns";
-import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RefreshCw, RotateCcw, Check, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RotateCcw, Check, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import api from "../../services/api";
+import nodeApi from "../../services/nodeApi";
 import { fetchProjectCategoryAFD, generateQCSample } from "../../services/qcService";
 import { useAuth } from "../../context/AuthContext";
+import { useDeviceInfo } from "../../hooks/useDeviceInfo";
 import { log, logError } from "../../config/environment";
 import { DateRangePicker } from "../common/CustomCalendar";
 import QCFormReportView from "./QCFormReportView";
@@ -23,16 +25,23 @@ const getTodayDate = () => {
 
 const QAAgentList = () => {
   const { user } = useAuth();
+  const { device_id, device_type } = useDeviceInfo();
+  const [searchParams] = useSearchParams();
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [agentLoading, setAgentLoading] = useState(false);
-  const [qcFormLoading, setQcFormLoading] = useState(false);
+  const [qcFormLoading, setQcFormLoading] = useState(null); // Track specific tracker_id that's loading
   const [expandedAgents, setExpandedAgents] = useState({});
   const [agentTrackers, setAgentTrackers] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
   
-  // Tab state
-  const [activeTab, setActiveTab] = useState('agent_files');
+  // Tab state - read from URL parameter if available
+  const subtabParam = searchParams.get('subtab');
+  const [activeTab, setActiveTab] = useState(
+    subtabParam === 'qc_report' ? 'qc_report' : 
+    subtabParam === 'agent_rework_files' ? 'agent_rework_files' :
+    'agent_files'
+  );
   
   // Selected agent for split view
   const [selectedAgentId, setSelectedAgentId] = useState(null);
@@ -70,7 +79,10 @@ const QAAgentList = () => {
 
         // 2. Fetch ALL tracker data (no date filter) to get all agents assigned to this QA
         const allTrackersRes = await api.post("/tracker/view", {
-          logged_in_user_id: user?.user_id
+          logged_in_user_id: user?.user_id,
+          device_id: device_id,
+          device_type: device_type,
+          qc_pending: 0  // Fetch only QC pending trackers
         });
         const allTrackerData = allTrackersRes.data?.data || {};
         const allTrackers = allTrackerData.trackers || [];
@@ -95,8 +107,11 @@ const QAAgentList = () => {
         const today = getTodayDate();
         const todayTrackersRes = await api.post("/tracker/view", {
           logged_in_user_id: user?.user_id,
+          device_id: device_id,
+          device_type: device_type,
           date_from: today,
-          date_to: today
+          date_to: today,
+          qc_pending: 0  // Fetch only QC pending trackers
         });
         const todayTrackerData = todayTrackersRes.data?.data || {};
         const todayTrackers = todayTrackerData.trackers || [];
@@ -144,7 +159,21 @@ const QAAgentList = () => {
       }
     };
     fetchAllData();
-  }, [user?.user_id]);
+  }, [user?.user_id, device_id, device_type]);
+
+  // Re-fetch data when tab changes and agent is selected
+  useEffect(() => {
+    if (selectedAgentId && (activeTab === 'agent_files' || activeTab === 'agent_rework_files')) {
+      if (activeTab === 'agent_rework_files') {
+        // Fetch with date filter or default to today
+        const filters = agentDateFilters[selectedAgentId] || { startDate: getTodayDate(), endDate: getTodayDate() };
+        fetchReworkTrackers(selectedAgentId, filters.startDate, filters.endDate);
+      } else {
+        fetchAgentTrackers(selectedAgentId);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   // Fetch tracker data for specific agent with date range
   const fetchAgentTrackers = async (agentId, startDate = null, endDate = null) => {
@@ -159,8 +188,11 @@ const QAAgentList = () => {
       
       const trackerRes = await api.post("/tracker/view", {
         logged_in_user_id: user?.user_id,
+        device_id: device_id,
+        device_type: device_type,
         date_from: filters.startDate,
-        date_to: filters.endDate
+        date_to: filters.endDate,
+        qc_pending: 0  // Fetch only QC pending trackers
       });
 
       const trackerData = trackerRes.data?.data || {};
@@ -195,6 +227,76 @@ const QAAgentList = () => {
     }
   };
 
+  // Fetch rework tracker data for specific agent with date range (frontend filtering)
+  const fetchReworkTrackers = async (agentId, startDate = null, endDate = null) => {
+    setAgentLoading(true);
+    try {
+      log('[QAAgentList] Fetching rework trackers for agent:', agentId);
+      
+      // Call Python backend API
+      const response = await api.post('/qc_rework/view_rework_trackers', {});
+      
+      const records = response.data?.data?.records || [];
+      
+      // Find the agent name for this agentId
+      const selectedAgent = agents.find(a => String(a.user_id) === String(agentId));
+      const agentName = selectedAgent?.user_name;
+      
+      // Filter records for this specific agent
+      let agentReworkTrackers = records
+        .filter(record => record.agent_name === agentName)
+        .map(record => ({
+          id: record.id,
+          agent_name: record.agent_name,
+          worked_datetime: record.worked_datetime,
+          evaluation_datetime: record.evaluation_datetime,
+          project_name: record.project_name,
+          task_name: record.task_name,
+          status: record.status,
+          qc_score: record.qc_score,
+          rework_file_path: record.rework_file_path,
+          // For compatibility with existing table code
+          date_time: record.worked_datetime,
+          qc_datetime: record.evaluation_datetime,
+          qc_status: record.status,
+          tracker_file: record.rework_file_path
+        }));
+      
+      // Frontend date filtering if dates are provided
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        
+        agentReworkTrackers = agentReworkTrackers.filter(tracker => {
+          // Use worked_datetime for filtering
+          const trackerDate = new Date(tracker.worked_datetime);
+          return trackerDate >= start && trackerDate <= end;
+        });
+        
+        log('[QAAgentList] Filtered rework trackers by date:', {
+          startDate,
+          endDate,
+          totalRecords: records.length,
+          filteredRecords: agentReworkTrackers.length
+        });
+      }
+      
+      log('[QAAgentList] Found rework trackers for agent:', agentReworkTrackers.length);
+      
+      setAgentTrackers(prev => ({
+        ...prev,
+        [agentId]: agentReworkTrackers
+      }));
+    } catch (error) {
+      logError("[QAAgentList] Error fetching rework trackers:", error);
+      toast.error("Failed to fetch rework tracker data");
+    } finally {
+      setAgentLoading(false);
+    }
+  };
+
   // Toggle agent card expansion
   const toggleAgent = (agentId) => {
     const isCurrentlyExpanded = expandedAgents[agentId];
@@ -206,7 +308,13 @@ const QAAgentList = () => {
     
     // If expanding (not currently expanded), fetch fresh data
     if (!isCurrentlyExpanded) {
-      fetchAgentTrackers(agentId);
+      if (activeTab === 'agent_rework_files') {
+        // Fetch rework data with date filter or default to today
+        const filters = agentDateFilters[agentId] || { startDate: getTodayDate(), endDate: getTodayDate() };
+        fetchReworkTrackers(agentId, filters.startDate, filters.endDate);
+      } else {
+        fetchAgentTrackers(agentId);
+      }
     }
   };
 
@@ -253,7 +361,11 @@ const QAAgentList = () => {
     }));
     
     // Fetch updated data with new dates immediately
-    fetchAgentTrackers(agentId, newFilters.startDate, newFilters.endDate);
+    if (activeTab === 'agent_rework_files') {
+      fetchReworkTrackers(agentId, newFilters.startDate, newFilters.endDate);
+    } else {
+      fetchAgentTrackers(agentId, newFilters.startDate, newFilters.endDate);
+    }
   };
 
   const handleAgentEndDateChange = (agentId, dateValue) => {
@@ -269,7 +381,11 @@ const QAAgentList = () => {
     }));
     
     // Fetch updated data with new dates immediately
-    fetchAgentTrackers(agentId, newFilters.startDate, newFilters.endDate);
+    if (activeTab === 'agent_rework_files') {
+      fetchReworkTrackers(agentId, newFilters.startDate, newFilters.endDate);
+    } else {
+      fetchAgentTrackers(agentId, newFilters.startDate, newFilters.endDate);
+    }
   };
 
   // Reset filters for specific agent
@@ -280,7 +396,11 @@ const QAAgentList = () => {
       [agentId]: { startDate: today, endDate: today }
     }));
     // Fetch updated data with today's date immediately
-    fetchAgentTrackers(agentId, today, today);
+    if (activeTab === 'agent_rework_files') {
+      fetchReworkTrackers(agentId, today, today);
+    } else {
+      fetchAgentTrackers(agentId, today, today);
+    }
   };
 
   // Handle QC Form action
@@ -300,7 +420,7 @@ const QAAgentList = () => {
       return;
     }
     
-    setQcFormLoading(true);
+    setQcFormLoading(tracker.tracker_id); // Set the specific tracker ID that's loading
     const loadingToast = toast.loading('Preparing QC Form...');
     
     try {
@@ -404,7 +524,7 @@ const QAAgentList = () => {
         { id: loadingToast }
       );
     } finally {
-      setQcFormLoading(false);
+      setQcFormLoading(null); // Reset loading state
     }
   };
 
@@ -426,10 +546,10 @@ const QAAgentList = () => {
 
         {/* Tabs Navigation */}
         <div className="bg-white rounded-2xl shadow-lg mb-6 border border-slate-200 overflow-hidden">
-          <div className="flex border-b border-slate-200">
+          <div className="grid grid-cols-3 border-b border-slate-200">
             <button
               onClick={() => setActiveTab('agent_files')}
-              className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
+              className={`px-6 py-4 text-sm font-bold transition-all relative ${
                 activeTab === 'agent_files'
                   ? 'text-blue-600 bg-blue-50'
                   : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
@@ -445,7 +565,7 @@ const QAAgentList = () => {
             </button>
             <button
               onClick={() => setActiveTab('qc_report')}
-              className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
+              className={`px-6 py-4 text-sm font-bold transition-all relative ${
                 activeTab === 'qc_report'
                   ? 'text-blue-600 bg-blue-50'
                   : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
@@ -459,11 +579,27 @@ const QAAgentList = () => {
                 <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
               )}
             </button>
+            <button
+              onClick={() => setActiveTab('agent_rework_files')}
+              className={`px-6 py-4 text-sm font-bold transition-all relative ${
+                activeTab === 'agent_rework_files'
+                  ? 'text-blue-600 bg-blue-50'
+                  : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <RotateCcw className="w-4 h-4" />
+                <span>Agent's Rework & Correction File Report</span>
+              </div>
+              {activeTab === 'agent_rework_files' && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Split View Layout */}
-        {activeTab === 'agent_files' && (
+        {/* Split View Layout - Agent Files & Rework Files */}
+        {(activeTab === 'agent_files' || activeTab === 'agent_rework_files') && (
           <>
         <div className="bg-white rounded-2xl shadow-xl border-2 border-slate-200 overflow-hidden" style={{ height: 'calc(100vh - 400px)', minHeight: '600px' }}>
           {loading ? (
@@ -559,7 +695,21 @@ const QAAgentList = () => {
                         key={agent.user_id}
                         onClick={() => {
                           setSelectedAgentId(agent.user_id);
-                          fetchAgentTrackers(agent.user_id);
+                          // Initialize date filter to today if not set
+                          if (!agentDateFilters[agent.user_id]) {
+                            const today = getTodayDate();
+                            setAgentDateFilters(prev => ({
+                              ...prev,
+                              [agent.user_id]: { startDate: today, endDate: today }
+                            }));
+                          }
+                          // Call appropriate API based on active tab
+                          if (activeTab === 'agent_rework_files') {
+                            const filters = agentDateFilters[agent.user_id] || { startDate: getTodayDate(), endDate: getTodayDate() };
+                            fetchReworkTrackers(agent.user_id, filters.startDate, filters.endDate);
+                          } else {
+                            fetchAgentTrackers(agent.user_id);
+                          }
                         }}
                         disabled={agentLoading}
                         className={`w-full text-left p-4 rounded-xl transition-all duration-300 border-2 relative overflow-hidden ${
@@ -645,7 +795,8 @@ const QAAgentList = () => {
                         </div>
                       </div>
 
-                      {/* Date Filter */}
+                      {/* Date Filter - Show for both agent_files and agent_rework_files tabs */}
+                      {(activeTab === 'agent_files' || activeTab === 'agent_rework_files') && (
                       <div className="px-6 py-4 bg-white border-b-2 border-slate-200">
                         <div className="flex flex-wrap items-end gap-4">
                           <div className="flex-1 min-w-[320px]">
@@ -671,6 +822,7 @@ const QAAgentList = () => {
                           </button>
                         </div>
                       </div>
+                      )}
 
                       {/* Files Table */}
                       <div className="flex-1 overflow-y-auto p-6">
@@ -680,132 +832,311 @@ const QAAgentList = () => {
                               <table className="min-w-full">
                                 <thead className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 sticky top-0">
                                   <tr>
-                                    <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                        Date & Time
-                                      </div>
-                                    </th>
-                                    <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                        Project
-                                      </div>
-                                    </th>
-                                    <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                        Task
-                                      </div>
-                                    </th>
-                                    <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
-                                      <div className="flex items-center justify-center gap-2">
-                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                        File
-                                      </div>
-                                    </th>
-                                    <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
-                                      <div className="flex items-center justify-center gap-2">
-                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                        Action
-                                      </div>
-                                    </th>
+                                    {activeTab === 'agent_rework_files' ? (
+                                      <>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Worked Date & Time
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Evaluation Date & Time
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Project
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Task
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
+                                          <div className="flex items-center justify-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Status
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
+                                          <div className="flex items-center justify-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            QC Score
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
+                                          <div className="flex items-center justify-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            File
+                                          </div>
+                                        </th>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Date & Time
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Project
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Task
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
+                                          <div className="flex items-center justify-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            File
+                                          </div>
+                                        </th>
+                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
+                                          <div className="flex items-center justify-center gap-2">
+                                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                                            Action
+                                          </div>
+                                        </th>
+                                      </>
+                                    )}
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                  {trackers.map((tracker, index) => (
+                                  {trackers.map((tracker, index) => {
+                                    // Helper function to format date/time
+                                    const formatDateTime = (dateTimeStr) => {
+                                      if (!dateTimeStr) return { date: '—', time: '—' };
+                                      try {
+                                        const date = new Date(dateTimeStr);
+                                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                        const day = date.getUTCDate();
+                                        const month = monthNames[date.getUTCMonth()];
+                                        const year = date.getUTCFullYear();
+                                        let hours = date.getUTCHours();
+                                        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+                                        const ampm = hours >= 12 ? 'PM' : 'AM';
+                                        hours = hours % 12 || 12;
+                                        return {
+                                          date: `${day} ${month} ${year}`,
+                                          time: `${hours}:${minutes} ${ampm}`
+                                        };
+                                      } catch {
+                                        return { date: '—', time: '—' };
+                                      }
+                                    };
+
+                                    // Helper function to get status badge class
+                                    const getStatusBadgeClass = (status) => {
+                                      if (!status) return 'bg-slate-100 text-slate-700';
+                                      const statusLower = status.toLowerCase();
+                                      if (statusLower === 'regular' || statusLower === 'approved') return 'bg-green-100 text-green-800';
+                                      if (statusLower === 'rework') return 'bg-yellow-100 text-yellow-800';
+                                      if (statusLower === 'correction') return 'bg-red-100 text-red-800';
+                                      return 'bg-slate-100 text-slate-700';
+                                    };
+
+                                    // Helper function to get QC score color class
+                                    const getQCScoreColorClass = (score) => {
+                                      if (score === null || score === undefined || score === '-' || isNaN(Number(score))) return 'text-slate-700 bg-slate-100';
+                                      const numScore = Number(score);
+                                      if (numScore >= 95) return 'text-green-800 bg-green-100 font-bold';
+                                      if (numScore >= 80) return 'text-yellow-700 bg-yellow-100 font-bold';
+                                      return 'text-red-700 bg-red-100 font-bold';
+                                    };
+
+                                    const workedDateTime = formatDateTime(tracker.date_time || tracker.tracker_datetime);
+                                    const evaluationDateTime = formatDateTime(tracker.qc_datetime || tracker.evaluation_datetime || tracker.qc_evaluation_date);
+
+                                    return (
                                     <tr
                                       key={tracker.tracker_id || index}
                                       className={`transition-all duration-200 group ${
                                         index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
                                       } hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50`}
                                     >
-                                      <td className="px-6 py-4 align-middle">
-                                        <div className="flex items-center gap-3">
-                                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200 shadow-sm">
-                                            <FileText className="w-5 h-5 text-blue-600" />
-                                          </div>
-                                          <div>
-                                            {tracker.date_time ? (() => {
-                                              const date = new Date(tracker.date_time);
-                                              const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                                              const day = date.getUTCDate();
-                                              const month = monthNames[date.getUTCMonth()];
-                                              const year = date.getUTCFullYear();
-                                              let hours = date.getUTCHours();
-                                              const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-                                              const ampm = hours >= 12 ? 'PM' : 'AM';
-                                              hours = hours % 12 || 12;
-                                              return (
-                                                <>
-                                                  <div className="font-bold text-slate-900 text-sm">{day} {month} {year}</div>
-                                                  <div className="text-xs text-slate-500 font-medium mt-0.5">
-                                                    <span className="bg-slate-100 px-2 py-0.5 rounded">
-                                                      {hours}:{minutes} {ampm}
-                                                    </span>
-                                                  </div>
-                                                </>
-                                              );
-                                            })() : (
-                                              <span className="text-slate-400">—</span>
+                                      {activeTab === 'agent_rework_files' ? (
+                                        <>
+                                          {/* Worked Date & Time */}
+                                          <td className="px-6 py-4 align-middle">
+                                            <div className="flex items-center gap-3">
+                                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200 shadow-sm">
+                                                <FileText className="w-5 h-5 text-blue-600" />
+                                              </div>
+                                              <div>
+                                                <div className="font-bold text-slate-900 text-sm">{workedDateTime.date}</div>
+                                                <div className="text-xs text-slate-500 font-medium mt-0.5">
+                                                  <span className="bg-slate-100 px-2 py-0.5 rounded">
+                                                    {workedDateTime.time}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </td>
+                                          {/* Evaluation Date & Time */}
+                                          <td className="px-6 py-4 align-middle">
+                                            <div>
+                                              <div className="font-semibold text-slate-800 text-sm">{evaluationDateTime.date}</div>
+                                              <div className="text-xs text-slate-500 font-medium mt-0.5">
+                                                <span className="bg-blue-50 px-2 py-0.5 rounded">
+                                                  {evaluationDateTime.time}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </td>
+                                          {/* Project */}
+                                          <td className="px-6 py-4 align-middle">
+                                            <div className="inline-flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100">
+                                              <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                                              <span className="font-bold text-blue-700 text-sm">
+                                                {tracker.project_name || "—"}
+                                              </span>
+                                            </div>
+                                          </td>
+                                          {/* Task */}
+                                          <td className="px-6 py-4 align-middle">
+                                            <span className="text-slate-700 font-medium text-sm">
+                                              {tracker.task_name || "—"}
+                                            </span>
+                                          </td>
+                                          {/* Status */}
+                                          <td className="px-6 py-4 align-middle text-center">
+                                            <span className={`px-3 py-1.5 rounded-lg font-semibold text-sm inline-block ${getStatusBadgeClass(tracker.qc_status || tracker.status)}`}>
+                                              {tracker.qc_status || tracker.status || '—'}
+                                            </span>
+                                          </td>
+                                          {/* QC Score */}
+                                          <td className="px-6 py-4 align-middle text-center">
+                                            <span className={`px-3 py-1.5 rounded-lg inline-block text-sm font-bold ${getQCScoreColorClass(tracker.qc_score || tracker.score)}`}>
+                                              {(tracker.qc_score != null || tracker.score != null) ? `${Number(tracker.qc_score || tracker.score).toFixed(2)}%` : '—'}
+                                            </span>
+                                          </td>
+                                          {/* File */}
+                                          <td className="px-6 py-4 align-middle text-center">
+                                            {tracker.tracker_file ? (
+                                              <a
+                                                href={tracker.tracker_file}
+                                                download
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center justify-center w-12 h-12 text-green-600 hover:text-white bg-green-50 hover:bg-gradient-to-br hover:from-green-600 hover:to-emerald-600 transition-all duration-300 rounded-xl shadow-sm hover:shadow-lg group/download"
+                                                title="Download file"
+                                                onClick={(e) => e.stopPropagation()}
+                                              >
+                                                <Download className="w-5 h-5 group-hover/download:scale-110 transition-transform" />
+                                              </a>
+                                            ) : (
+                                              <span className="text-slate-300 text-sm">No file</span>
                                             )}
-                                          </div>
-                                        </div>
-                                      </td>
-                                      <td className="px-6 py-4 align-middle">
-                                        <div className="inline-flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100">
-                                          <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-                                          <span className="font-bold text-blue-700 text-sm">
-                                            {tracker.project_name || "—"}
-                                          </span>
-                                        </div>
-                                      </td>
-                                      <td className="px-6 py-4 align-middle">
-                                        <span className="text-slate-700 font-medium text-sm">
-                                          {tracker.task_name || "—"}
-                                        </span>
-                                      </td>
-                                      <td className="px-6 py-4 align-middle text-center">
-                                        {tracker.tracker_file ? (
-                                          <a
-                                            href={tracker.tracker_file}
-                                            download
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center justify-center w-12 h-12 text-green-600 hover:text-white bg-green-50 hover:bg-gradient-to-br hover:from-green-600 hover:to-emerald-600 transition-all duration-300 rounded-xl shadow-sm hover:shadow-lg group/download"
-                                            title="Download file"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            <Download className="w-5 h-5 group-hover/download:scale-110 transition-transform" />
-                                          </a>
-                                        ) : (
-                                          <span className="text-slate-300 text-sm">No file</span>
-                                        )}
-                                      </td>
-                                      <td className="px-6 py-4 align-middle text-center">
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleQCForm(tracker);
-                                          }}
-                                          disabled={qcFormLoading}
-                                          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-700 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed disabled:transform-none text-white text-sm font-bold rounded-xl transition-all duration-300 shadow-md hover:shadow-xl transform hover:scale-105 group/btn"
-                                        >
-                                          {qcFormLoading ? (
-                                            <>
-                                              <Loader2 className="w-4 h-4 animate-spin" />
-                                              <span>Loading...</span>
-                                            </>
-                                          ) : (
-                                            <>
-                                              <FileCheck className="w-4 h-4 group-hover/btn:rotate-12 transition-transform" />
-                                              <span>QC Form</span>
-                                            </>
-                                          )}
-                                        </button>
-                                      </td>
+                                          </td>
+                                        </>
+                                      ) : (
+                                        <>
+                                          {/* Date & Time (Original design for agent_files tab) */}
+                                          <td className="px-6 py-4 align-middle">
+                                            <div className="flex items-center gap-3">
+                                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200 shadow-sm">
+                                                <FileText className="w-5 h-5 text-blue-600" />
+                                              </div>
+                                              <div>
+                                                {tracker.date_time ? (() => {
+                                                  const date = new Date(tracker.date_time);
+                                                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                                  const day = date.getUTCDate();
+                                                  const month = monthNames[date.getUTCMonth()];
+                                                  const year = date.getUTCFullYear();
+                                                  let hours = date.getUTCHours();
+                                                  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+                                                  const ampm = hours >= 12 ? 'PM' : 'AM';
+                                                  hours = hours % 12 || 12;
+                                                  return (
+                                                    <>
+                                                      <div className="font-bold text-slate-900 text-sm">{day} {month} {year}</div>
+                                                      <div className="text-xs text-slate-500 font-medium mt-0.5">
+                                                        <span className="bg-slate-100 px-2 py-0.5 rounded">
+                                                          {hours}:{minutes} {ampm}
+                                                        </span>
+                                                      </div>
+                                                    </>
+                                                  );
+                                                })() : (
+                                                  <span className="text-slate-400">—</span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </td>
+                                          {/* Project */}
+                                          <td className="px-6 py-4 align-middle">
+                                            <div className="inline-flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100">
+                                              <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                                              <span className="font-bold text-blue-700 text-sm">
+                                                {tracker.project_name || "—"}
+                                              </span>
+                                            </div>
+                                          </td>
+                                          {/* Task */}
+                                          <td className="px-6 py-4 align-middle">
+                                            <span className="text-slate-700 font-medium text-sm">
+                                              {tracker.task_name || "—"}
+                                            </span>
+                                          </td>
+                                          {/* File */}
+                                          <td className="px-6 py-4 align-middle text-center">
+                                            {tracker.tracker_file ? (
+                                              <a
+                                                href={tracker.tracker_file}
+                                                download
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center justify-center w-12 h-12 text-green-600 hover:text-white bg-green-50 hover:bg-gradient-to-br hover:from-green-600 hover:to-emerald-600 transition-all duration-300 rounded-xl shadow-sm hover:shadow-lg group/download"
+                                                title="Download file"
+                                                onClick={(e) => e.stopPropagation()}
+                                              >
+                                                <Download className="w-5 h-5 group-hover/download:scale-110 transition-transform" />
+                                              </a>
+                                            ) : (
+                                              <span className="text-slate-300 text-sm">No file</span>
+                                            )}
+                                          </td>
+                                          {/* Action */}
+                                          <td className="px-6 py-4 align-middle text-center">
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleQCForm(tracker);
+                                              }}
+                                              disabled={qcFormLoading === tracker.tracker_id}
+                                              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-700 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed disabled:transform-none text-white text-sm font-bold rounded-xl transition-all duration-300 shadow-md hover:shadow-xl transform hover:scale-105 group/btn"
+                                            >
+                                              {qcFormLoading === tracker.tracker_id ? (
+                                                <>
+                                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                                  <span>Loading...</span>
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <FileCheck className="w-4 h-4 group-hover/btn:rotate-12 transition-transform" />
+                                                  <span>QC Form</span>
+                                                </>
+                                              )}
+                                            </button>
+                                          </td>
+                                        </>
+                                      )}
                                     </tr>
-                                  ))}
+                                  );
+                                  })}
                                 </tbody>
                               </table>
                             </div>

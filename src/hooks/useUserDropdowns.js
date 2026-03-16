@@ -21,7 +21,7 @@ export const useUserDropdowns = () => {
           setError(null);
 
           try {
-               const data = await fetchUserDropdowns(userId);
+               const data = await fetchUserDropdowns();
 
                console.log('[useUserDropdowns] Raw data received:', data);
                console.log('[useUserDropdowns] projectManagers:', data.projectManagers);

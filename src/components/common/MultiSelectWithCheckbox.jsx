@@ -130,20 +130,10 @@ const MultiSelectWithCheckbox = ({
           {getDisplayText()}
         </span>
         {value.length > 0 && !disabled && (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleClear(e);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.stopPropagation();
-                handleClear(e);
-              }
-            }}
-            className="p-0.5 hover:bg-slate-200 rounded-full transition-colors mr-1 cursor-pointer"
+          <button
+            type="button"
+            onClick={handleClear}
+            className="p-0.5 hover:bg-slate-200 rounded-full transition-colors mr-1"
           >
             <X className="w-3.5 h-3.5 text-slate-500" />
           </span>
