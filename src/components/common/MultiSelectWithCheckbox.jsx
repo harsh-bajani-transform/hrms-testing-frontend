@@ -136,7 +136,7 @@ const MultiSelectWithCheckbox = ({
             className="p-0.5 hover:bg-slate-200 rounded-full transition-colors mr-1"
           >
             <X className="w-3.5 h-3.5 text-slate-500" />
-          </span>
+          </button>
         )}
         <ChevronDown 
           className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${

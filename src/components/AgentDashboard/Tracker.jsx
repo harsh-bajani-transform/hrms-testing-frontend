@@ -243,6 +243,10 @@ const Tracker = ({ embedded = false }) => {
         };
         const res = await api.post("/dropdown/get", payload);
         const projectsWithTasks = res.data?.data || [];
+        
+        console.log('[Tracker] Projects fetched from API:', projectsWithTasks);
+        console.log('[Tracker] Sample project structure:', projectsWithTasks[0]);
+        
         setProjects(projectsWithTasks);
       } catch (error) {
         logError('[Tracker] Error fetching projects with tasks:', error);
@@ -271,8 +275,18 @@ const Tracker = ({ embedded = false }) => {
     setTasks(project?.tasks || []);
     
     // Set validation requirements based on project configuration
-    setRequiresAIValidation(project?.requires_ai_evaluation ?? false);
-    setRequiresDuplicateCheck(project?.requires_duplicate_check ?? false);
+    const requiresAI = project?.requires_ai_evaluation ?? false;
+    const requiresDuplicate = project?.requires_duplicate_check ?? false;
+    
+    console.log('[Tracker] Project validation requirements:', {
+      project_id: project?.project_id,
+      project_name: project?.project_name,
+      requires_ai_evaluation: requiresAI,
+      requires_duplicate_check: requiresDuplicate
+    });
+    
+    setRequiresAIValidation(requiresAI);
+    setRequiresDuplicateCheck(requiresDuplicate);
     
     if (!project?.tasks?.find(t => String(t.task_id) === String(selectedTask))) {
       setSelectedTask("");
@@ -617,6 +631,36 @@ const Tracker = ({ embedded = false }) => {
       if (fileError) {
         toast.error("Please fix file upload errors before submitting", { duration: 4000 });
         return;
+      }
+      
+      // Check if file is uploaded when validations are required
+      if ((requiresAIValidation || requiresDuplicateCheck) && !file) {
+        toast.error("Please upload a file to complete required validations", { duration: 4000 });
+        return;
+      }
+      
+      // Check if AI Evaluation is required and completed successfully
+      if (requiresAIValidation && file) {
+        if (!aiEvalComplete) {
+          toast.error("Please complete AI Evaluation before submitting", { duration: 4000 });
+          return;
+        }
+        if (aiEvalSuccess !== true) {
+          toast.error("AI Evaluation must pass before submitting", { duration: 4000 });
+          return;
+        }
+      }
+      
+      // Check if Duplicate Check is required and completed successfully
+      if (requiresDuplicateCheck && file) {
+        if (!duplicateCheckComplete) {
+          toast.error("Please complete Duplicate Check before submitting", { duration: 4000 });
+          return;
+        }
+        if (duplicateCheckSuccess !== true) {
+          toast.error("Duplicate Check must pass before submitting", { duration: 4000 });
+          return;
+        }
       }
       
       setSubmitting(true);
@@ -1151,22 +1195,19 @@ const Tracker = ({ embedded = false }) => {
 
                 <button
                   onClick={() => {
-                    if (isSubmissionWindowOpen) {
+                    // Timer validation commented out - modal is now always accessible
+                    // if (isSubmissionWindowOpen) {
                       setShowModal(true);
-                    } else {
-                      toast.error(`Tracker submissions are only allowed in the first 15 minutes of each hour. Next window opens at ${nextWindowTime}`, {
-                        duration: 5000,
-                        icon: '⏰'
-                      });
-                    }
+                    // } else {
+                    //   toast.error(`Tracker submissions are only allowed in the first 15 minutes of each hour. Next window opens at ${nextWindowTime}`, {
+                    //     duration: 5000,
+                    //     icon: '⏰'
+                    //   });
+                    // }
                   }}
-                  disabled={!isSubmissionWindowOpen}
-                  className={`inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transition-all duration-200 ${
-                    isSubmissionWindowOpen
-                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white transform hover:scale-105 cursor-pointer'
-                      : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                  }`}
-                  title={!isSubmissionWindowOpen ? `Submissions only allowed in first 15 minutes of each hour. Next window: ${nextWindowTime}` : 'Add new tracker'}
+                  // disabled={!isSubmissionWindowOpen}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transition-all duration-200 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white transform hover:scale-105 cursor-pointer"
+                  title="Add new tracker"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19"></line>

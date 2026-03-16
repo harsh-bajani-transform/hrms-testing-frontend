@@ -24,9 +24,23 @@ const EditProjectModal = ({
 	const fileInputRef = useRef(null);
 	const [editProject, setEditProject] = useState(null);
 
+	// Debug incoming props at component level
+	console.log('[EditProjectModal] ========== COMPONENT RENDER ==========');
+	console.log('[EditProjectModal] Props received:');
+	console.log('  - projectManagers:', projectManagers);
+	console.log('  - assistantManagers:', assistantManagers);
+	console.log('  - qaManagers:', qaManagers);
+	console.log('  - teams:', teams);
+	console.log('  - projectCategories:', projectCategories);
+
 	// Initialize editProject from project prop
 	useEffect(() => {
-		if (project) {
+		console.log('[EditProjectModal] useEffect triggered');
+		console.log('[EditProjectModal] project prop:', project);
+		console.log('[EditProjectModal] project.name:', project?.name);
+		console.log('[EditProjectModal] project.project_name:', project?.project_name);
+		
+		if (project && Object.keys(project).length > 0) {
 			console.log('[EditProjectModal] ========== INITIALIZING EDIT PROJECT ==========');
 			console.log('[EditProjectModal][DEBUG] Incoming project prop:', project);
 			console.log('[EditProjectModal][DEBUG] Incoming projectManagers prop:', projectManagers);
@@ -156,6 +170,9 @@ const EditProjectModal = ({
 		console.log('[EditProjectModal][DEBUG] requires_duplicate_check:', newProject.requires_duplicate_check);
 		
 		setEditProject(newProject);
+		console.log('[EditProjectModal] setEditProject called with:', newProject);
+		} else {
+			console.log('[EditProjectModal] project prop is empty or invalid, not initializing');
 		}
 	}, [project, projectManagers, assistantManagers, qaManagers, teams, projectCategories]);
 
@@ -164,11 +181,28 @@ const EditProjectModal = ({
 		if (!items || !Array.isArray(items)) return [];
 		return items
 			.map(item => {
-				const id = String(item.project_category_id ?? item[idKey] ?? item.team_id ?? item.id ?? '');
-				const label = item[labelKey] || item.label || item.user_name || item.team_name || item.name || id;
-				return { id, label };
+				// Preserve specific ID fields for proper matching
+				const user_id = item.user_id || item[idKey];
+				const team_id = item.team_id;
+				const project_category_id = item.project_category_id;
+				const afd_id = item.afd_id;
+				
+				// Generate generic id for fallback
+				const id = String(project_category_id ?? user_id ?? team_id ?? afd_id ?? item.id ?? '');
+				
+				// Handle various label field names - prioritize 'label' and 'name' which come from ProjectsManagement
+				const label = item.label || item.name || item[labelKey] || item.user_name || item.team_name || id;
+				
+				return { 
+					id, 
+					label,
+					user_id: user_id ? String(user_id) : undefined,
+					team_id: team_id ? String(team_id) : undefined,
+					project_category_id: project_category_id ? String(project_category_id) : undefined,
+					afd_id: afd_id ? String(afd_id) : undefined
+				};
 			})
-			.filter(item => item.id !== null && item.id !== undefined && String(item.id) !== 'undefined');
+			.filter(item => item.id !== null && item.id !== undefined && String(item.id) !== 'undefined' && item.id !== '');
 	};
 
 	const processedAssistantManagers = normalizeList(assistantManagers, 'user_id', 'user_name');
@@ -177,17 +211,19 @@ const EditProjectModal = ({
 	const processedProjectManagers = normalizeList(projectManagers, 'user_id', 'user_name');
 	const processedProjectCategories = normalizeList(projectCategories, 'project_category_id', 'label');
 	
-	console.log('[EditProjectModal] Project Categories:', {
-		raw: projectCategories,
-		processed: processedProjectCategories
-	});
+	console.log('[EditProjectModal] After normalizeList:');
+	console.log('  - processedProjectManagers:', processedProjectManagers);
+	console.log('  - processedAssistantManagers:', processedAssistantManagers);
+	console.log('  - processedQaManagers:', processedQaManagers);
+	console.log('  - processedTeams:', processedTeams);
+	console.log('  - processedProjectCategories:', processedProjectCategories);
 	
-	// Build options for project category
+	// Build options for project category (ensure all values are strings)
 	const projectCategoryOptions = [
 		{ value: "", label: "Select Category" },
 		...processedProjectCategories
 			.filter((cat) => cat.id !== null && cat.id !== undefined && String(cat.id) !== 'undefined')
-			.map((cat) => ({ value: cat.id, label: cat.label }))
+			.map((cat) => ({ value: String(cat.project_category_id || cat.id), label: cat.label }))
 	];
 	
 	console.log('[EditProjectModal] Final category options:', projectCategoryOptions);
@@ -211,12 +247,29 @@ const EditProjectModal = ({
 	};
 
 	if (!editProject) {
+		console.log('[EditProjectModal] editProject is null, showing loading...');
+		console.log('[EditProjectModal] project prop:', project);
 		return (
 			<div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50">
 				<div className="bg-white rounded-xl shadow-2xl p-8">Loading...</div>
 			</div>
 		);
 	}
+	
+	console.log('[EditProjectModal] ===== RENDERING FORM =====');
+	console.log('[EditProjectModal] editProject state:', editProject);
+	console.log('[EditProjectModal] editProject.name:', editProject.name);
+	console.log('[EditProjectModal] editProject.code:', editProject.code);
+	console.log('[EditProjectModal] editProject.projectManagerId:', editProject.projectManagerId, 'type:', typeof editProject.projectManagerId);
+	console.log('[EditProjectModal] editProject.projectCategoryId:', editProject.projectCategoryId, 'type:', typeof editProject.projectCategoryId);
+	console.log('[EditProjectModal] editProject.assistantManagerIds:', editProject.assistantManagerIds, 'types:', editProject.assistantManagerIds?.map(id => typeof id));
+	console.log('[EditProjectModal] editProject.qaManagerIds:', editProject.qaManagerIds, 'types:', editProject.qaManagerIds?.map(id => typeof id));
+	console.log('[EditProjectModal] editProject.teamIds:', editProject.teamIds, 'types:', editProject.teamIds?.map(id => typeof id));
+	console.log('[EditProjectModal] processedProjectManagers:', processedProjectManagers.map(pm => ({ id: pm.id, type: typeof pm.id, label: pm.label })));
+	console.log('[EditProjectModal] processedAssistantManagers:', processedAssistantManagers.map(am => ({ id: am.id, type: typeof am.id, label: am.label })));
+	console.log('[EditProjectModal] processedQaManagers:', processedQaManagers.map(qa => ({ id: qa.id, type: typeof qa.id, label: qa.label })));
+	console.log('[EditProjectModal] processedTeams:', processedTeams.map(team => ({ id: team.id, type: typeof team.id, label: team.label })));
+	console.log('[EditProjectModal] projectCategoryOptions:', projectCategoryOptions.map(opt => ({ value: opt.value, type: typeof opt.value, label: opt.label })));
 
 	return (
 		<div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -311,11 +364,11 @@ const EditProjectModal = ({
 								Project Manager <span className="text-red-600">*</span>
 							</label>
 							<SearchableSelect
-								value={editProject.projectManagerId}
-								onChange={(val) => setEditProject(prev => ({ ...prev, projectManagerId: val }))}
-								options={[
-									{ value: "", label: "Select Project Manager" },
-									...processedProjectManagers.map((pm) => ({ value: pm.id, label: pm.label }))
+							value={editProject.projectManagerId || ""}
+							onChange={(val) => setEditProject(prev => ({ ...prev, projectManagerId: val }))}
+							options={[
+								{ value: "", label: "Select Project Manager" },
+								...processedProjectManagers.map((pm) => ({ value: String(pm.user_id || pm.id), label: pm.label }))
 								]}
 								icon={User}
 								placeholder="Select Project Manager"
@@ -329,13 +382,13 @@ const EditProjectModal = ({
 								Assistant Project Manager(s) <span className="text-red-600">*</span>
 							</label>
 							<MultiSelectWithCheckbox
-								value={editProject.assistantManagerIds || []}
-								onChange={(val) => {
-									setEditProject(prev => ({ ...prev, assistantManagerIds: val }));
-									if (onFieldChange) onFieldChange('assistantManagerIds', val);
-									if (clearFieldError) clearFieldError('assistantManagerIds');
-								}}
-								options={processedAssistantManagers.map((am) => ({ value: am.id, label: am.label }))}
+							value={Array.isArray(editProject.assistantManagerIds) ? editProject.assistantManagerIds.map(String) : []}
+							onChange={(val) => {
+								setEditProject(prev => ({ ...prev, assistantManagerIds: val }));
+								if (onFieldChange) onFieldChange('assistantManagerIds', val);
+								if (clearFieldError) clearFieldError('assistantManagerIds');
+							}}
+						options={processedAssistantManagers.map((am) => ({ value: String(am.user_id || am.id), label: am.label }))}
 								icon={Users}
 								placeholder="Select Assistant Project Managers"
 								error={!!formErrors.assistantManagerIds}
@@ -349,13 +402,13 @@ const EditProjectModal = ({
 								Quality Analyst(s) <span className="text-red-600">*</span>
 							</label>
 							<MultiSelectWithCheckbox
-								value={editProject.qaManagerIds || []}
-								onChange={(val) => {
-									setEditProject(prev => ({ ...prev, qaManagerIds: val }));
-									if (onFieldChange) onFieldChange('qaManagerIds', val);
-									if (clearFieldError) clearFieldError('qaManagerIds');
-								}}
-								options={processedQaManagers.map((qa) => ({ value: qa.id, label: qa.label }))}
+							value={Array.isArray(editProject.qaManagerIds) ? editProject.qaManagerIds.map(String) : []}
+							onChange={(val) => {
+								setEditProject(prev => ({ ...prev, qaManagerIds: val }));
+								if (onFieldChange) onFieldChange('qaManagerIds', val);
+								if (clearFieldError) clearFieldError('qaManagerIds');
+							}}
+						options={processedQaManagers.map((qa) => ({ value: String(qa.user_id || qa.id), label: qa.label }))}
 								icon={Users}
 								placeholder="Select Quality Analysts"
 								error={!!formErrors.qaManagerIds}
@@ -369,13 +422,13 @@ const EditProjectModal = ({
 								Agent(s) <span className="text-red-600">*</span>
 							</label>
 							<MultiSelectWithCheckbox
-								value={editProject.teamIds || []}
-								onChange={(val) => {
-									setEditProject(prev => ({ ...prev, teamIds: val }));
-									if (onFieldChange) onFieldChange('teamIds', val);
-									if (clearFieldError) clearFieldError('teamIds');
-								}}
-								options={processedTeams.map((team) => ({ value: team.id, label: team.label }))}
+							value={Array.isArray(editProject.teamIds) ? editProject.teamIds.map(String) : []}
+							onChange={(val) => {
+								setEditProject(prev => ({ ...prev, teamIds: val }));
+								if (onFieldChange) onFieldChange('teamIds', val);
+								if (clearFieldError) clearFieldError('teamIds');
+							}}
+							options={processedTeams.map((team) => ({ value: String(team.user_id || team.team_id || team.id), label: team.label }))}
 								icon={Users}
 								placeholder="Select Agents"
 								error={!!formErrors.teamIds}

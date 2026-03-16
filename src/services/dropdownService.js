@@ -9,8 +9,11 @@ import api from "./api";
 /**
  * Fetches data for a specific dropdown category from the backend.
  * @param {string} dropdownType - The type of data to retrieve.
+ * @param {number} userId - The logged in user ID.
+ * @param {number} projectId - Optional project ID filter.
+ * @param {number} teamId - Optional team ID filter.
  */
-export const fetchDropdown = async (dropdownType, projectId = null) => {
+export const fetchDropdown = async (dropdownType, userId = null, projectId = null, teamId = null) => {
      try {
           console.log(`[dropdownService] fetchDropdown called with:`, {
                dropdownType,
@@ -19,9 +22,18 @@ export const fetchDropdown = async (dropdownType, projectId = null) => {
                teamId
           });
           
-          const payload = { dropdown_type: dropdownType };
+          const payload = { 
+               dropdown_type: dropdownType
+          };
+          
+          // Add logged_in_user_id if provided
+          if (userId) payload.logged_in_user_id = userId;
+          
+          // Add optional filters
           if (projectId) payload.project_id = projectId;
-          const response = await api.post("/dropdown/get", payload);
+          if (teamId) payload.team_id = teamId;
+          
+          const response = await api.post("dropdown/get", payload);
           const data = response.data?.data || [];
           console.log(`[dropdownService] Fetched ${dropdownType}:`, data.length, 'items');
           // Returns the data array or an empty array as a fallback
@@ -35,9 +47,12 @@ export const fetchDropdown = async (dropdownType, projectId = null) => {
 /**
  * Executes concurrent API calls to retrieve all metadata required for user profiles.
  * Optimized with Promise.all for faster loading.
+ * @param {number} userId - The logged in user ID.
  */
 export const fetchUserDropdowns = async (userId = null) => {
      try {
+          console.log('[dropdownService] fetchUserDropdowns called with userId:', userId);
+          
           const [
                roles,
                designations,
@@ -48,14 +63,14 @@ export const fetchUserDropdowns = async (userId = null) => {
                agents,
                projectCategories,
           ] = await Promise.all([
-               fetchDropdown("user roles"),
-               fetchDropdown("designations"),
-               fetchDropdown("teams"),
-               fetchDropdown("project manager"),
-               fetchDropdown("assistant manager"),
-               fetchDropdown("qa"),
-               fetchDropdown("agent"),
-               fetchDropdown("project categories"),
+               fetchDropdown("user roles", userId),
+               fetchDropdown("designations", userId),
+               fetchDropdown("teams", userId),
+               fetchDropdown("project manager", userId),
+               fetchDropdown("assistant manager", userId),
+               fetchDropdown("qa", userId),
+               fetchDropdown("agent", userId),
+               fetchDropdown("project categories", userId),
           ]);
 
           const result = {
@@ -69,6 +84,8 @@ export const fetchUserDropdowns = async (userId = null) => {
                projectCategories,
           };
 
+          console.log('[dropdownService] fetchUserDropdowns result:', result);
+          
           return result;
      } catch (error) {
           console.error("❌ Error fetching user dropdowns:", error);

@@ -17,18 +17,22 @@ export const useUserDropdowns = () => {
      const [error, setError] = useState(null);
 
      const loadDropdowns = useCallback(async (userId = null) => {
+          console.log('[useUserDropdowns] ========== loadDropdowns CALLED ==========');
+          console.log('[useUserDropdowns] userId parameter:', userId);
+          
           setLoading(true);
           setError(null);
 
           try {
-               const data = await fetchUserDropdowns();
+               console.log('[useUserDropdowns] Calling fetchUserDropdowns with userId:', userId);
+               const data = await fetchUserDropdowns(userId);
 
                console.log('[useUserDropdowns] Raw data received:', data);
-               console.log('[useUserDropdowns] projectManagers:', data.projectManagers);
-               console.log('[useUserDropdowns] assistantManagers:', data.assistantManagers);
-               console.log('[useUserDropdowns] qas:', data.qas);
-               console.log('[useUserDropdowns] agents:', data.agents);
-               console.log('[useUserDropdowns] projectCategories:', data.projectCategories);
+               console.log('[useUserDropdowns] projectManagers:', data.projectManagers, 'count:', data.projectManagers?.length);
+               console.log('[useUserDropdowns] assistantManagers:', data.assistantManagers, 'count:', data.assistantManagers?.length);
+               console.log('[useUserDropdowns] qas:', data.qas, 'count:', data.qas?.length);
+               console.log('[useUserDropdowns] agents:', data.agents, 'count:', data.agents?.length);
+               console.log('[useUserDropdowns] projectCategories:', data.projectCategories, 'count:', data.projectCategories?.length);
 
                // ✅ VALIDATION GUARD
                const isValid =
@@ -54,8 +58,10 @@ export const useUserDropdowns = () => {
                     return null;
                }
 
+               console.log('[useUserDropdowns] ✅ Data validation passed, setting dropdowns state');
                setDropdowns(data);
                setLoading(false);
+               console.log('[useUserDropdowns] ✅ Dropdowns state updated successfully');
                return data;
           } catch (err) {
                console.error("❌ Dropdown fetch failed:", err);
