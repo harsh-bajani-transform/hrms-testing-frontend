@@ -16,12 +16,12 @@ export const useUserDropdowns = () => {
      const [loading, setLoading] = useState(false);
      const [error, setError] = useState(null);
 
-     const loadDropdowns = useCallback(async () => {
+     const loadDropdowns = useCallback(async (userId = null) => {
           setLoading(true);
           setError(null);
 
           try {
-               const data = await fetchUserDropdowns();
+               const data = await fetchUserDropdowns(userId);
 
                console.log('[useUserDropdowns] Raw data received:', data);
                console.log('[useUserDropdowns] projectManagers:', data.projectManagers);

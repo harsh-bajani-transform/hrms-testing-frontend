@@ -50,6 +50,11 @@ const ProjectsManagement = ({
     loadDropdowns
   } = useUserDropdowns();
 
+  // Wrapper to load dropdowns with user ID
+  const loadDropdownsWithUser = async () => {
+    await loadDropdowns(user?.user_id);
+  };
+
   const {
     newProject,
     projectFiles,
@@ -118,7 +123,7 @@ const ProjectsManagement = ({
     console.log('[ProjectsManagement] Opening edit for project:', project);
     console.log('[ProjectsManagement] Current dropdowns before loading:', dropdowns);
     
-    await loadDropdowns();
+    await loadDropdownsWithUser();
     
     console.log('[ProjectsManagement] Dropdowns after loading:', dropdowns);
     console.log('[ProjectsManagement] Dropdowns.projectManagers:', dropdowns.projectManagers);
@@ -181,10 +186,14 @@ const ProjectsManagement = ({
       assistantManagers: normalizeDropdown(dropdowns.assistantManagers),
       qaManagers: normalizeDropdown(dropdowns.qas),
       teams: normalizeDropdown(dropdowns.agents, 'team'),
-      projectManagers: normalizeDropdown(dropdowns.projectManagers)
+      projectManagers: normalizeDropdown(dropdowns.projectManagers),
+      requires_ai_evaluation: fullProject.requires_ai_evaluation ?? false,
+      requires_duplicate_check: fullProject.requires_duplicate_check ?? false,
     };
     
     console.log('[ProjectsManagement] Final project with mapped arrays:', fullProject);
+    console.log('[ProjectsManagement] requires_ai_evaluation:', fullProject.requires_ai_evaluation);
+    console.log('[ProjectsManagement] requires_duplicate_check:', fullProject.requires_duplicate_check);
     openEditModal(fullProject);
   };
 
@@ -279,7 +288,7 @@ const ProjectsManagement = ({
                 qaManagers={normalizedQaManagers}
                 teams={normalizedTeams}
                 projectCategories={normalizedProjectCategories}
-                loadDropdowns={loadDropdowns}
+                loadDropdowns={loadDropdownsWithUser}
                 dropdownLoading={dropdownLoading}
                 isSubmitting={isSubmitting}
                 formErrors={formErrors}

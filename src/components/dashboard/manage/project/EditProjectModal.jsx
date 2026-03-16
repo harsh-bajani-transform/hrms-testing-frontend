@@ -147,19 +147,21 @@ const EditProjectModal = ({
 				name: project.name || project.project_name || "",
 				code: project.code || project.project_code || "",
 				description: project.description || project.project_description || "",
-			};
+			requires_ai_evaluation: project.requires_ai_evaluation ?? false,
+			requires_duplicate_check: project.requires_duplicate_check ?? false,
+		};
 
-			console.log('[EditProjectModal][DEBUG] newProject state to set:', newProject);
-
-			setTimeout(() => {
-				setEditProject(newProject);
-			}, 0);
+		console.log('[EditProjectModal][DEBUG] newProject state to set:', newProject);
+		console.log('[EditProjectModal][DEBUG] requires_ai_evaluation:', newProject.requires_ai_evaluation);
+		console.log('[EditProjectModal][DEBUG] requires_duplicate_check:', newProject.requires_duplicate_check);
+		
+		setEditProject(newProject);
 		}
-	}, [project, assistantManagers, qaManagers, teams]);
+	}, [project, projectManagers, assistantManagers, qaManagers, teams, projectCategories]);
 
-	// Helper to normalize dropdown data for lookup by id
+	// Helper function to normalize dropdown lists
 	const normalizeList = (items, idKey = 'user_id', labelKey = 'user_name') => {
-		if (!Array.isArray(items)) return [];
+		if (!items || !Array.isArray(items)) return [];
 		return items
 			.map(item => {
 				const id = String(item.project_category_id ?? item[idKey] ?? item.team_id ?? item.id ?? '');
@@ -219,20 +221,20 @@ const EditProjectModal = ({
 	return (
 		<div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
 			<div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[98vh] flex flex-col overflow-hidden animate-fade-in-up">
-			<div className="p-3 bg-blue-800 text-white flex justify-between items-center shrink-0">
-				<div>
-					<h2 className="text-lg font-bold flex items-center gap-2">
-						<Briefcase className="w-5 h-5 text-blue-300" />
-						Edit Project
-					</h2>
-					<p className="text-blue-200 text-xs">Update project details as needed</p>
+				<div className="p-3 bg-blue-800 text-white flex justify-between items-center shrink-0">
+					<div>
+						<h2 className="text-lg font-bold flex items-center gap-2">
+							<Briefcase className="w-5 h-5 text-blue-300" />
+							Edit Project
+						</h2>
+						<p className="text-blue-200 text-xs">Update project details as needed</p>
+					</div>
+					<button onClick={onClose} className="p-1 hover:bg-white/10 rounded-full transition-colors">
+						<X className="w-5 h-5 text-white" />
+					</button>
 				</div>
-				<button onClick={onClose} className="p-1 hover:bg-white/10 rounded-full transition-colors">
-					<X className="w-5 h-5 text-white" />
-				</button>
-			</div>
-			<div className="flex-1 overflow-y-auto p-3 md:p-4 bg-white">
-				<div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+				<div className="flex-1 overflow-y-auto p-3 md:p-4 bg-white">
+					<div className="grid grid-cols-1 md:grid-cols-3 gap-8">
 						{/* Project Name */}
 						<div>
 							<label className="block text-sm font-semibold text-gray-700 mb-2">Project Name <span className="text-red-600">*</span></label>
@@ -381,77 +383,163 @@ const EditProjectModal = ({
 								maxDisplayCount={2}
 							/>
 						</div>
-						{/* Project Files Upload */}
-						<div className="md:col-span-1">
-							<label className="block text-sm font-semibold text-gray-700 mb-2">Project Files</label>
-							<input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} multiple />
-							<div className="flex items-center gap-3">
-								<div onClick={triggerFileInput} className="flex items-center justify-between w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 focus-within:ring-2 focus-within:ring-blue-500">
-									<div className="flex items-center gap-2 text-gray-600">
-										<Upload className="w-4 h-4" />
-										{projectFiles && projectFiles.length > 0 ? (
-											<span>{projectFiles.length} file(s) selected</span>
-										) : (
-											<span>Select project files</span>
-										)}
-									</div>
-									<span className="text-blue-600 text-xs font-medium">Browse</span>
-								</div>
-							</div>
-							{projectFiles && projectFiles.length > 0 && (
-								<div className="mt-1 space-y-1">
-									{projectFiles.map((file, index) => {
-										const isExistingFile = file.isExisting || !(file instanceof File);
-										return (
-											<div key={`${file.name}-${index}`} className="flex items-center justify-between px-3 py-1 border border-gray-200 rounded-md text-sm bg-white gap-2">
-												{isExistingFile && file.url ? (
-													<a
-														href={file.url}
-														target="_blank"
-														rel="noopener noreferrer"
-														className="truncate text-xs max-w-[70%] text-blue-600 hover:underline"
-														title="Click to view file"
-													>
-														{file.name}
-													</a>
-												) : (
-													<span className="truncate text-xs max-w-[70%] text-gray-700">
-														{file.name}
-													</span>
-												)}
-												<div className="flex items-center gap-2">
-													{isExistingFile && (
-														<span className="text-green-600 text-xs font-medium whitespace-nowrap">Existing</span>
-													)}
-													{!isExistingFile && (
-														<span className="text-orange-600 text-xs font-medium whitespace-nowrap">New</span>
-													)}
-													<button
-														type="button"
-														onClick={(e) => {
-															e.stopPropagation();
-															handleRemoveFile(index);
-														}}
-														className="text-gray-400 hover:text-red-500 flex-shrink-0"
-														title="Remove file"
-													>
-														<XCircle className="w-4 h-4" />
-													</button>
-												</div>
-											</div>
-										);
-									})}
-								</div>
-							)}
+					{/* AI Evaluation Requirement Toggle */}
+					<div className="md:col-span-1">
+						<label className="block text-sm font-semibold text-gray-700 mb-2">
+							Requires AI Evaluation
+						</label>
+						<div className="flex items-center gap-3">
+							<button
+								type="button"
+								onClick={() => {
+									const newValue = !editProject.requires_ai_evaluation;
+									setEditProject(prev => ({ ...prev, requires_ai_evaluation: newValue }));
+									if (onFieldChange) onFieldChange('requires_ai_evaluation', newValue);
+								}}
+								className={`
+									relative inline-flex h-7 w-12 items-center rounded-full transition-colors
+									focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2
+									${
+										editProject.requires_ai_evaluation
+											? 'bg-purple-600'
+											: 'bg-gray-300'
+									}
+								`}
+							>
+								<span
+									className={`
+										inline-block h-5 w-5 transform rounded-full bg-white transition-transform
+										${
+											editProject.requires_ai_evaluation
+												? 'translate-x-6'
+												: 'translate-x-1'
+										}
+									`}
+								/>
+							</button>
+							<span className="text-sm text-gray-600">
+								{editProject.requires_ai_evaluation ? 'Yes' : 'No'}
+							</span>
 						</div>
+						<p className="mt-1 text-xs text-gray-500">
+							Enable if this project requires AI evaluation checks for tracker submissions
+						</p>
+					</div>
+
+					{/* Duplicate Check Requirement Toggle */}
+					<div className="md:col-span-1">
+						<label className="block text-sm font-semibold text-gray-700 mb-2">
+							Requires Duplicate Check
+						</label>
+						<div className="flex items-center gap-3">
+							<button
+								type="button"
+								onClick={() => {
+									const newValue = !editProject.requires_duplicate_check;
+									setEditProject(prev => ({ ...prev, requires_duplicate_check: newValue }));
+									if (onFieldChange) onFieldChange('requires_duplicate_check', newValue);
+								}}
+								className={`
+									relative inline-flex h-7 w-12 items-center rounded-full transition-colors
+									focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2
+									${
+										editProject.requires_duplicate_check
+											? 'bg-orange-600'
+											: 'bg-gray-300'
+									}
+								`}
+							>
+								<span
+									className={`
+										inline-block h-5 w-5 transform rounded-full bg-white transition-transform
+										${
+											editProject.requires_duplicate_check
+												? 'translate-x-6'
+												: 'translate-x-1'
+										}
+									`}
+								/>
+							</button>
+							<span className="text-sm text-gray-600">
+								{editProject.requires_duplicate_check ? 'Yes' : 'No'}
+							</span>
+						</div>
+						<p className="mt-1 text-xs text-gray-500">
+							Enable if this project requires duplicate check validation for tracker submissions
+						</p>
+					</div>
+
+					{/* Project Files Upload */}
+					<div className="md:col-span-1">
+						<label className="block text-sm font-semibold text-gray-700 mb-2">Project Files</label>
+						<input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} multiple />
+						<div className="flex items-center gap-3">
+							<div onClick={triggerFileInput} className="flex items-center justify-between w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 focus-within:ring-2 focus-within:ring-blue-500">
+								<div className="flex items-center gap-2 text-gray-600">
+									<Upload className="w-4 h-4" />
+									{projectFiles && projectFiles.length > 0 ? (
+										<span>{projectFiles.length} file(s) selected</span>
+									) : (
+										<span>Select project files</span>
+									)}
+								</div>
+								<span className="text-blue-600 text-xs font-medium">Browse</span>
+							</div>
+						</div>
+						{projectFiles && projectFiles.length > 0 && (
+							<div className="mt-1 space-y-1">
+								{projectFiles.map((file, index) => {
+									const isExistingFile = file.isExisting || !(file instanceof File);
+									return (
+										<div key={`${file.name}-${index}`} className="flex items-center justify-between px-3 py-1 border border-gray-200 rounded-md text-sm bg-white gap-2">
+											{isExistingFile && file.url ? (
+												<a
+													href={file.url}
+													target="_blank"
+													rel="noopener noreferrer"
+													className="truncate text-xs max-w-[70%] text-blue-600 hover:underline"
+													title="Click to view file"
+												>
+													{file.name}
+												</a>
+											) : (
+												<span className="truncate text-xs max-w-[70%] text-gray-700">
+													{file.name}
+												</span>
+											)}
+											<div className="flex items-center gap-2">
+												{isExistingFile && (
+													<span className="text-green-600 text-xs font-medium whitespace-nowrap">Existing</span>
+												)}
+												{!isExistingFile && (
+													<span className="text-orange-600 text-xs font-medium whitespace-nowrap">New</span>
+												)}
+												<button
+													type="button"
+													onClick={(e) => {
+														e.stopPropagation();
+														handleRemoveFile(index);
+													}}
+													className="text-gray-400 hover:text-red-500 shrink-0"
+													title="Remove file"
+												>
+													<XCircle className="w-4 h-4" />
+												</button>
+											</div>
+										</div>
+									);
+								})}
+							</div>
+						)}
 					</div>
 				</div>
-				<div className="p-4 border-t border-slate-200 bg-white flex justify-end gap-3">
-					<button
-						onClick={() => onUpdate(editProject)}
-						disabled={isSubmitting}
-						className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-					>
+			</div>
+			<div className="p-4 border-t border-slate-200 bg-white flex justify-end gap-3">
+				<button
+					onClick={() => onUpdate(editProject)}
+					disabled={isSubmitting}
+					className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+				>
 						{isSubmitting ? (
 							<>
 								<svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

@@ -66,6 +66,10 @@ const Tracker = ({ embedded = false }) => {
   const [duplicateCheckResult, setDuplicateCheckResult] = useState(null);
   const [geminiApiKey, setGeminiApiKey] = useState(() => sessionStorage.getItem("gemini_api_key") || "");
 
+  // Validation requirements based on project configuration
+  const [requiresAIValidation, setRequiresAIValidation] = useState(false);
+  const [requiresDuplicateCheck, setRequiresDuplicateCheck] = useState(false);
+
   // Sync geminiApiKey with sessionStorage
   useEffect(() => {
     const syncKey = () => setGeminiApiKey(sessionStorage.getItem("gemini_api_key") || "");
@@ -258,11 +262,18 @@ const Tracker = ({ embedded = false }) => {
       setTasks([]);
       setSelectedTask("");
       setBaseTarget("");
+      setRequiresAIValidation(false);
+      setRequiresDuplicateCheck(false);
       return;
     }
     setLoadingTasks(true);
     const project = projects.find(p => String(p.project_id) === String(selectedProject));
     setTasks(project?.tasks || []);
+    
+    // Set validation requirements based on project configuration
+    setRequiresAIValidation(project?.requires_ai_evaluation ?? false);
+    setRequiresDuplicateCheck(project?.requires_duplicate_check ?? false);
+    
     if (!project?.tasks?.find(t => String(t.task_id) === String(selectedTask))) {
       setSelectedTask("");
       setBaseTarget("");
@@ -419,8 +430,8 @@ const Tracker = ({ embedded = false }) => {
       return;
     }
 
-    // Only allow duplicate check if AI evaluation passed
-    if (!aiEvalComplete || aiEvalSuccess !== true) {
+    // Only require AI evaluation to be completed if it's actually required for this project
+    if (requiresAIValidation && (!aiEvalComplete || aiEvalSuccess !== true)) {
       toast.error('Please complete AI Evaluation first');
       return;
     }
@@ -664,7 +675,19 @@ const Tracker = ({ embedded = false }) => {
                 timeout: 300000 // 5 minutes for processing
               });
               
-              if (processRes.data?.success === true || processRes.data?.status === 'success') {
+              log('[Tracker] Process-excel response:', processRes.data);
+              
+              // More lenient success check - accept various success indicators
+              const isSuccess = 
+                processRes.status === 200 || 
+                processRes.status === 201 ||
+                processRes.data?.success === true || 
+                processRes.data?.success === 1 ||
+                processRes.data?.status === 'success' ||
+                processRes.data?.status === 200 ||
+                processRes.data?.message?.toLowerCase().includes('success');
+              
+              if (isSuccess) {
                 log('[Tracker] File processed successfully, hashes created');
                 toast.success("File processed and hashes created successfully!");
               } else {
@@ -881,11 +904,13 @@ const Tracker = ({ embedded = false }) => {
         'Date/Time': tracker.date_time ? tracker.date_time : "-",
         'Project': tracker.project_name || getProjectName(tracker.project_id),
         'Task': tracker.task_name || '-',
+        'Shift': tracker.shift_type === 'day' ? 'Day' : tracker.shift_type === 'night' ? 'Night' : '-',
         'Per Hour Target': tracker.tenure_target ?? 0,
         'Production': tracker.production || 0,
         'Billable Hours': tracker.billable_hours !== null && tracker.billable_hours !== undefined
           ? Number(tracker.billable_hours).toFixed(2)
           : "0.00",
+        'Notes': tracker.tracker_note || '-',
         'Has File': tracker.tracker_file ? 'Yes' : 'No'
       }));
 
@@ -893,9 +918,11 @@ const Tracker = ({ embedded = false }) => {
         'Date/Time': '',
         'Project': '',
         'Task': 'TOTAL',
+        'Shift': '',
         'Per Hour Target': totals.tenureTarget.toFixed(2),
         'Production': totals.production.toFixed(2),
         'Billable Hours': totals.billableHours.toFixed(2),
+        'Notes': '',
         'Has File': ''
       });
 
@@ -904,9 +931,11 @@ const Tracker = ({ embedded = false }) => {
         { wch: 18 },
         { wch: 20 },
         { wch: 25 },
+        { wch: 10 },
         { wch: 15 },
         { wch: 12 },
         { wch: 15 },
+        { wch: 30 },
         { wch: 10 }
       ];
 
@@ -1884,7 +1913,7 @@ const Tracker = ({ embedded = false }) => {
                   </div>
 
                   {/* AI Evaluation and Duplicate Check Buttons */}
-                  {uploadComplete && (!aiEvalComplete || !duplicateCheckComplete) && aiEvalSuccess !== false && (
+                  {uploadComplete && (requiresAIValidation || requiresDuplicateCheck) && (
                     <div className="mt-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
                       <p className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
@@ -1892,10 +1921,14 @@ const Tracker = ({ embedded = false }) => {
                           <line x1="12" y1="16" x2="12" y2="12"></line>
                           <line x1="12" y1="8" x2="12.01" y2="8"></line>
                         </svg>
-                        File uploaded! Complete checks in order: ① AI Evaluation → ② Duplicate Check
+                        File uploaded! Complete required checks in order:
+                        {requiresAIValidation && " ① AI Evaluation"}
+                        {requiresAIValidation && requiresDuplicateCheck && " →"}
+                        {requiresDuplicateCheck && " ② Duplicate Check"}
                       </p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {/* AI Evaluation Button */}
+                        {/* AI Evaluation Button - only show if required */}
+                        {requiresAIValidation && (
                         <div>
                           <button
                             type="button"
@@ -1967,13 +2000,15 @@ const Tracker = ({ embedded = false }) => {
                             </div>
                           )}
                         </div>
+                        )}
 
-                        {/* Duplicate Check Button */}
+                        {/* Duplicate Check Button - only show if required */}
+                        {requiresDuplicateCheck && (
                         <div>
                           <button
                             type="button"
                             onClick={handleDuplicateCheck}
-                            disabled={isDuplicateChecking || duplicateCheckComplete || !aiEvalComplete || aiEvalSuccess === false}
+                            disabled={isDuplicateChecking || duplicateCheckComplete || (requiresAIValidation && (!aiEvalComplete || aiEvalSuccess === false))}
                             className="w-full px-4 py-3 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 disabled:from-gray-400 disabled:to-gray-500 text-white font-bold text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-200 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                           >
                             {isDuplicateChecking ? (
@@ -2103,12 +2138,27 @@ const Tracker = ({ embedded = false }) => {
                             </div>
                           )}
                         </div>
+                        )}
                       </div>
                     </div>
                   )}
 
-                  {/* Success message when all checks complete and passed */}
-                  {aiEvalComplete && duplicateCheckComplete && aiEvalSuccess === true && duplicateCheckSuccess === true && (
+                  {/* Info message when no validations are required but file is uploaded */}
+                  {uploadComplete && !requiresAIValidation && !requiresDuplicateCheck && (
+                    <div className="mt-4 p-4 bg-green-50 border-2 border-green-200 rounded-xl flex items-center gap-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-600 shrink-0">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                      </svg>
+                      <p className="text-sm font-semibold text-green-900">File uploaded successfully! No validation checks required for this project.</p>
+                    </div>
+                  )}
+
+                  {/* Success message when all required checks complete and passed */}
+                  {uploadComplete && 
+                   ((!requiresAIValidation && !requiresDuplicateCheck) || 
+                    ((requiresAIValidation ? (aiEvalComplete && aiEvalSuccess === true) : true) && 
+                     (requiresDuplicateCheck ? (duplicateCheckComplete && duplicateCheckSuccess === true) : true))) && 
+                   (requiresAIValidation || requiresDuplicateCheck) && (
                     <div className="mt-4 p-4 bg-green-50 border-2 border-green-300 rounded-xl flex items-center gap-3">
                       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-600 shrink-0">
                         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
@@ -2146,8 +2196,14 @@ const Tracker = ({ embedded = false }) => {
                     Cancel
                   </button>
                   
-                  {/* Submit button - Show when: no file uploaded OR all checks completed AND passed */}
-                  {(!file || (aiEvalComplete && duplicateCheckComplete && aiEvalSuccess === true && duplicateCheckSuccess === true)) && (
+                  {/* Submit button - Show when: no file uploaded OR validation requirements met */}
+                  {(!file || (
+                    // If no validations required, allow submit
+                    (!requiresAIValidation && !requiresDuplicateCheck) ||
+                    // If validations required, check they're complete and passed
+                    ((requiresAIValidation ? (aiEvalComplete && aiEvalSuccess === true) : true) &&
+                     (requiresDuplicateCheck ? (duplicateCheckComplete && duplicateCheckSuccess === true) : true))
+                  )) && (
                     <button
                       type="submit"
                       // disabled={submitting || isUploading || !isSubmissionWindowOpen}

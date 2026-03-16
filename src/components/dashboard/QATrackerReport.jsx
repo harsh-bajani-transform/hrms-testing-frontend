@@ -1101,11 +1101,13 @@ const QATrackerReport = () => {
         'Agent': tracker.user_name || "-",
         'Project': tracker.project_name || "-",
         'Task': tracker.task_name || "-",
+        'Shift': tracker.shift_type === 'day' ? 'Day' : tracker.shift_type === 'night' ? 'Night' : '-',
         'Per Hour Target': tracker.tenure_target || 0,
         'Production': tracker.production || 0,
         'Billable Hours': tracker.billable_hours !== null && tracker.billable_hours !== undefined
           ? Number(tracker.billable_hours).toFixed(2)
           : "0.00",
+        'Notes': tracker.tracker_note || '-',
         'Has File': tracker.tracker_file ? 'Yes' : 'No'
       }));
 
@@ -1115,9 +1117,11 @@ const QATrackerReport = () => {
         'Agent': '',
         'Project': '',
         'Task': 'TOTALS',
+        'Shift': '',
         'Per Hour Target': totals.tenureTarget.toFixed(2),
         'Production': totals.production.toFixed(2),
         'Billable Hours': totals.billableHours.toFixed(2),
+        'Notes': '',
         'Has File': ''
       });
 

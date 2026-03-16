@@ -412,6 +412,90 @@ const AddProjectFormModal = ({
                                    />
                               </div>
 
+                              {/* AI Evaluation Requirement Toggle */}
+                              <div className="md:col-span-1">
+                                   <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Requires AI Evaluation
+                                   </label>
+                                   <div className="flex items-center gap-3">
+                                        <button
+                                             type="button"
+                                             onClick={() => {
+                                                  const newValue = !newProject.requires_ai_evaluation;
+                                                  onFieldChange("requires_ai_evaluation", newValue);
+                                             }}
+                                             className={`
+                                                  relative inline-flex h-7 w-12 items-center rounded-full transition-colors
+                                                  focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2
+                                                  ${
+                                                       newProject.requires_ai_evaluation
+                                                            ? 'bg-purple-600'
+                                                            : 'bg-gray-300'
+                                                  }
+                                             `}
+                                        >
+                                             <span
+                                                  className={`
+                                                       inline-block h-5 w-5 transform rounded-full bg-white transition-transform
+                                                       ${
+                                                            newProject.requires_ai_evaluation
+                                                                 ? 'translate-x-6'
+                                                                 : 'translate-x-1'
+                                                       }
+                                                  `}
+                                             />
+                                        </button>
+                                        <span className="text-sm text-gray-600">
+                                             {newProject.requires_ai_evaluation ? 'Yes' : 'No'}
+                                        </span>
+                                   </div>
+                                   <p className="mt-1 text-xs text-gray-500">
+                                        Enable if this project requires AI evaluation checks for tracker submissions
+                                   </p>
+                              </div>
+
+                              {/* Duplicate Check Requirement Toggle */}
+                              <div className="md:col-span-1">
+                                   <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Requires Duplicate Check
+                                   </label>
+                                   <div className="flex items-center gap-3">
+                                        <button
+                                             type="button"
+                                             onClick={() => {
+                                                  const newValue = !newProject.requires_duplicate_check;
+                                                  onFieldChange("requires_duplicate_check", newValue);
+                                             }}
+                                             className={`
+                                                  relative inline-flex h-7 w-12 items-center rounded-full transition-colors
+                                                  focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2
+                                                  ${
+                                                       newProject.requires_duplicate_check
+                                                            ? 'bg-orange-600'
+                                                            : 'bg-gray-300'
+                                                  }
+                                             `}
+                                        >
+                                             <span
+                                                  className={`
+                                                       inline-block h-5 w-5 transform rounded-full bg-white transition-transform
+                                                       ${
+                                                            newProject.requires_duplicate_check
+                                                                 ? 'translate-x-6'
+                                                                 : 'translate-x-1'
+                                                       }
+                                                  `}
+                                             />
+                                        </button>
+                                        <span className="text-sm text-gray-600">
+                                             {newProject.requires_duplicate_check ? 'Yes' : 'No'}
+                                        </span>
+                                   </div>
+                                   <p className="mt-1 text-xs text-gray-500">
+                                        Enable if this project requires duplicate check validation for tracker submissions
+                                   </p>
+                              </div>
+
                               {/* Project Files Upload */}
                               {/* <div className="md:col-span-1">
                                    <label className="block text-sm font-semibold text-gray-700 mb-2">

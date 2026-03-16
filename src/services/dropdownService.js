@@ -9,11 +9,14 @@ import api from "./api";
 /**
  * Fetches data for a specific dropdown category from the backend.
  * @param {string} dropdownType - The type of data to retrieve.
+ * @param {number} projectId - Optional project ID
+ * @param {number} userId - Optional user ID (required for agent dropdown)
  */
-export const fetchDropdown = async (dropdownType, projectId = null) => {
+export const fetchDropdown = async (dropdownType, projectId = null, userId = null) => {
      try {
           const payload = { dropdown_type: dropdownType };
           if (projectId) payload.project_id = projectId;
+          if (userId) payload.logged_in_user_id = userId;
           const response = await api.post("/dropdown/get", payload);
           const data = response.data?.data || [];
           console.log(`[dropdownService] Fetched ${dropdownType}:`, data);
@@ -28,8 +31,9 @@ export const fetchDropdown = async (dropdownType, projectId = null) => {
 /**
  * Executes concurrent API calls to retrieve all metadata required for user profiles.
  * Optimized with Promise.all for faster loading.
+ * @param {number} userId - Logged in user ID (required for agent dropdown)
  */
-export const fetchUserDropdowns = async () => {
+export const fetchUserDropdowns = async (userId = null) => {
      try {
           const [
                roles,
@@ -41,14 +45,14 @@ export const fetchUserDropdowns = async () => {
                agents,
                projectCategories,
           ] = await Promise.all([
-               fetchDropdown("user roles"),
-               fetchDropdown("designations"),
-               fetchDropdown("teams"),
-               fetchDropdown("project manager"),
-               fetchDropdown("assistant manager"),
-               fetchDropdown("qa"),
-               fetchDropdown("agent"),
-               fetchDropdown("project categories"),
+               fetchDropdown("user roles", null, userId),
+               fetchDropdown("designations", null, userId),
+               fetchDropdown("teams", null, userId),
+               fetchDropdown("project manager", null, userId),
+               fetchDropdown("assistant manager", null, userId),
+               fetchDropdown("qa", null, userId),
+               fetchDropdown("agent", null, userId),
+               fetchDropdown("project categories", null, userId),
           ]);
 
           const result = {
