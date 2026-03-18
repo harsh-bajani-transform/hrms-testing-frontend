@@ -109,10 +109,10 @@ const QCFormPage = () => {
     }));
     
     // Determine status based on score
+    // Above 90: regular, Below 90: rework
+    // Correction is only sent when user explicitly clicks Correction button
     let status = 'regular';
-    if (qcScore < 80) {
-      status = 'correction';
-    } else if (qcScore < 95) {
+    if (qcScore < 90) {
       status = 'rework';
     }
     
@@ -1344,7 +1344,7 @@ const QCFormPage = () => {
         </button>
 
         {/* Conditional Submit Button based on QC Score */}
-        {qcScore >= 95 && (
+        {qcScore >= 90 && (
           <button
             onClick={handleRegularSubmit}
             disabled={saving}
@@ -1363,7 +1363,7 @@ const QCFormPage = () => {
             )}
           </button>
         )}
-        {qcScore < 95 && (
+        {qcScore < 90 && (
           <button
             onClick={handleReworkSubmit}
             disabled={saving}

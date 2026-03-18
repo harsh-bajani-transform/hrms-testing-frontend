@@ -11,7 +11,7 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
-  const apiBaseURL = "http://192.168.125.203:5000";
+  const apiBaseURL = "http://192.168.125.209:5000";
 
   return {
     plugins: [react(), tailwindcss()],
