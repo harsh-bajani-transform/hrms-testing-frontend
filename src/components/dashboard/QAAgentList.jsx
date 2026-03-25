@@ -429,7 +429,7 @@ const QAAgentList = () => {
       
       const [afdResponse, sampleResponse, userListResponse] = await Promise.all([
         fetchProjectCategoryAFD(tracker.project_category_id),
-        generateQCSample(tracker.tracker_id, user.user_id),
+        generateQCSample(tracker.tracker_id, user.user_id, tracker.qc_percentage),
         // Fetch user list to get agent's manager information
         api.post('/user/list', {
           user_id: user?.user_id,

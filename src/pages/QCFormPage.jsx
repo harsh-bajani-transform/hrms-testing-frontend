@@ -157,7 +157,9 @@ const QCFormPage = () => {
       let transformedAFD = null;
 
       // Fetch AFD data from Python API
-      const afdResponse = await api.post('/qc_afd/list', {});
+      const afdResponse = await api.post('/qc_afd/list', {
+        project_category_id: trackerData.project_category_id
+      });
       
       if (afdResponse.data.status === 200 && afdResponse.data.data.length > 0) {
         // Get the first AFD (or match by project/tracker)
@@ -182,14 +184,15 @@ const QCFormPage = () => {
         setAfdData(transformedAFD);
       }
 
-      // Fetch 10% sample data from tracker using Node API
+      // Fetch sample data from tracker using Node API
       let sampleData = [];
       
       if (trackerData.tracker_id && user?.user_id) {
         try {
           const sampleResponse = await generateQCSample(
             trackerData.tracker_id,
-            user.user_id
+            user.user_id,
+            trackerData.qc_percentage
           );
           
           // Log full response structure to debug - IMMEDIATELY after receiving
@@ -1264,14 +1267,14 @@ const QCFormPage = () => {
             </div>
           </div>
 
-          {/* 10% Data Count */}
+          {/* QC Sample Data Count */}
           <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center">
                 <Target className="w-6 h-6 text-indigo-600" />
               </div>
               <div>
-                <p className="text-sm text-slate-600 font-medium">10% Data Generated</p>
+                <p className="text-sm text-slate-600 font-medium">Data Generated for QC</p>
                 <p className="text-2xl font-bold text-slate-800">
                   {sampleSize || errorMetrics.tenPercentCount}
                 </p>

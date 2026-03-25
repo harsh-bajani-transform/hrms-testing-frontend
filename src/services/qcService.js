@@ -78,18 +78,20 @@ export const fetchQCAFDList = async () => {
 };
 
 /**
- * Generate 10% sample data from tracker file
+ * Generate sample data from tracker file
  * @param {number} tracker_id - Tracker ID
  * @param {number} logged_in_user_id - Logged in user ID
+ * @param {number} sampling_percentage - Sampling percentage (optional, defaults to 10 if not provided)
  * @returns {Promise} Sample data response with file URL and records
  */
-export const generateQCSample = async (tracker_id, logged_in_user_id) => {
+export const generateQCSample = async (tracker_id, logged_in_user_id, sampling_percentage = 10) => {
   try {
-    log(`[QC Service] Generating sample for tracker ${tracker_id}`);
+    log(`[QC Service] Generating sample for tracker ${tracker_id} with sampling percentage ${sampling_percentage}%`);
 
     const response = await nodeApi.post("/qc-records/generate-sample", {
       tracker_id,
       logged_in_user_id,
+      sampling_percentage,
     });
 
     log(`[QC Service] Sample generated successfully:`, response.data);
