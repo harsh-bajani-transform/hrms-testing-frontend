@@ -74,8 +74,7 @@ const UserMonthlyReport = () => {
         const response = await api.post('/user/list', {
           user_id: String(user?.user_id),
           device_id: user?.device_id || 'web',
-          device_type: user?.device_type || 'Laptop',
-          is_active: 1
+          device_type: user?.device_type || 'Laptop'
         });
         
         if (response.data?.data) {
