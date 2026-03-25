@@ -970,17 +970,12 @@ const QAAgentList = () => {
                                         <>
                                           {/* Worked Date & Time */}
                                           <td className="px-6 py-4 align-middle">
-                                            <div className="flex items-center gap-3">
-                                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200 shadow-sm">
-                                                <FileText className="w-5 h-5 text-blue-600" />
-                                              </div>
-                                              <div>
-                                                <div className="font-bold text-slate-900 text-sm">{workedDateTime.date}</div>
-                                                <div className="text-xs text-slate-500 font-medium mt-0.5">
-                                                  <span className="bg-slate-100 px-2 py-0.5 rounded">
-                                                    {workedDateTime.time}
-                                                  </span>
-                                                </div>
+                                            <div>
+                                              <div className="font-bold text-slate-900 text-sm">{workedDateTime.date}</div>
+                                              <div className="text-xs text-slate-500 font-medium mt-0.5">
+                                                <span className="bg-slate-100 px-2 py-0.5 rounded">
+                                                  {workedDateTime.time}
+                                                </span>
                                               </div>
                                             </div>
                                           </td>

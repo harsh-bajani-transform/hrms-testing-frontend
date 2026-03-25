@@ -673,6 +673,10 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
           // Append team IDs as JSON array
           formData.append('task_team_id', JSON.stringify(teamIds.map(id => Number(id))));
           
+          // Append QC percentage
+          const qcValue = taskPayload?.qcPercentage && taskPayload.qcPercentage !== '' ? taskPayload.qcPercentage : '0';
+          formData.append('qc_percentage', qcValue);
+          
           // Append important columns if provided
           if (taskPayload?.importantColumns && taskPayload.importantColumns.length > 0) {
                formData.append('important_columns', JSON.stringify(taskPayload.importantColumns));
@@ -716,35 +720,48 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
                return false;
           }
 
-          const name = taskPayload?.name?.trim();
-          const target = taskPayload?.target;
-          const teamIds = taskPayload?.teamIds || [];
-
-          if (!name || !target || teamIds.length === 0) {
-               toast.error("Please fill task name, target, and select at least one agent");
+          // Validate only if fields are present (since we're sending only changed fields)
+          if (taskPayload?.name !== undefined && !taskPayload.name?.trim()) {
+               toast.error("Task name cannot be empty");
+               return false;
+          }
+          if (taskPayload?.target !== undefined && (!taskPayload.target || Number(taskPayload.target) <= 0)) {
+               toast.error("Target must be greater than 0");
+               return false;
+          }
+          if (taskPayload?.teamIds !== undefined && (!taskPayload.teamIds || taskPayload.teamIds.length === 0)) {
+               toast.error("Select at least one agent");
                return false;
           }
 
-          // Create FormData for file upload support
+          // Create FormData with only changed fields
           const formData = new FormData();
           formData.append('project_id', Number(projectId));
           formData.append('task_id', Number(taskId));
-          formData.append('task_name', name);
-          formData.append('task_description', taskPayload?.description?.trim() || "");
-          formData.append('task_target', String(target));
           formData.append('device_id', deviceInfo.device_id);
           formData.append('device_type', deviceInfo.device_type);
           
-          // Append team IDs as JSON array
-          formData.append('task_team_id', JSON.stringify(teamIds.map(id => Number(id))));
-          
-          // Append important columns if provided
-          if (taskPayload?.importantColumns && taskPayload.importantColumns.length > 0) {
+          // Append only fields that are present in taskPayload (changed fields)
+          if (taskPayload?.name !== undefined) {
+               formData.append('task_name', taskPayload.name.trim());
+          }
+          if (taskPayload?.description !== undefined) {
+               formData.append('task_description', taskPayload.description?.trim() || "");
+          }
+          if (taskPayload?.target !== undefined) {
+               formData.append('task_target', String(taskPayload.target));
+          }
+          if (taskPayload?.teamIds !== undefined) {
+               formData.append('task_team_id', JSON.stringify(taskPayload.teamIds.map(id => Number(id))));
+          }
+          if (taskPayload?.qcPercentage !== undefined) {
+               const qcValue = taskPayload.qcPercentage && taskPayload.qcPercentage !== '' ? taskPayload.qcPercentage : '0';
+               formData.append('qc_percentage', qcValue);
+          }
+          if (taskPayload?.importantColumns !== undefined && taskPayload.importantColumns.length > 0) {
                formData.append('important_columns', JSON.stringify(taskPayload.importantColumns));
           }
-          
-          // Append file if provided (new file to replace existing)
-          if (taskPayload?.file) {
+          if (taskPayload?.file !== undefined) {
                formData.append('task_file', taskPayload.file);
           }
 
