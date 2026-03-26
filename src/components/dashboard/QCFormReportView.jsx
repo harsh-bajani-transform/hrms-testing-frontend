@@ -59,11 +59,11 @@ const QCFormReportView = () => {
   const filteredReports = useMemo(() => {
     let filtered = qcReports;
 
-    // Filter by date range (timestamp)
+    // Filter by date range (created_at)
     if (startDate && endDate) {
       filtered = filtered.filter(report => {
-        if (!report.timestamp) return false;
-        const evalDate = new Date(report.timestamp).toISOString().split('T')[0];
+        if (!report.created_at) return false;
+        const evalDate = new Date(report.created_at).toISOString().split('T')[0];
         return evalDate >= startDate && evalDate <= endDate;
       });
     }
@@ -145,7 +145,7 @@ const QCFormReportView = () => {
       // Calculate summary statistics
       const totalRecords = filteredReports.length;
       const totalQCRecords = filteredReports.reduce((sum, report) => {
-        return sum + (report['10%_qc_file_records'] || report['10%_data_generated_count'] || 0);
+        return sum + (report.qc_generated_count || 0);
       }, 0);
       const avgScore = filteredReports.length > 0 
         ? (filteredReports.reduce((sum, r) => sum + parseFloat(r.qc_score || 0), 0) / filteredReports.length).toFixed(2)
@@ -162,7 +162,7 @@ const QCFormReportView = () => {
       // Prepare data for export
       const exportData = filteredReports.map((report) => {
         // Format evaluation date & time
-        const evalDateTime = report.timestamp ? formatDateTime(report.timestamp) : { date: "N/A", time: "N/A" };
+        const evalDateTime = report.created_at ? formatDateTime(report.created_at) : { date: "N/A", time: "N/A" };
         const evaluationDateTime = `${evalDateTime.date} ${evalDateTime.time}`;
         
         // Format work date
@@ -196,7 +196,7 @@ const QCFormReportView = () => {
           'Project': report.project_name || 'N/A',
           'Task': report.task_name || 'N/A',
           'Total Record': report.file_record_count || 0,
-          'QC Record': report['10%_qc_file_records'] || report['10%_data_generated_count'] || 0,
+          'QC Record': report.qc_generated_count || 0,
           'Errors Count': errorList.length,
           'Error List': errorListString,
           'Status': report.status || 'N/A',
@@ -530,7 +530,7 @@ const QCFormReportView = () => {
                 </tr>
               ) : (
                 filteredReports.map((report, index) => {
-                  const evalDateTime = report.timestamp ? formatDateTime(report.timestamp) : { date: "N/A", time: "N/A" };
+                  const evalDateTime = report.created_at ? formatDateTime(report.created_at) : { date: "N/A", time: "N/A" };
                   const workDate = report.date_of_file_submission ? formatDate(report.date_of_file_submission) : "N/A";
                   
                   let eList = [];
@@ -542,7 +542,7 @@ const QCFormReportView = () => {
                   
                   const errorCount = eList.length;
                   const totalRecord = report.file_record_count || 0;
-                  const qcRecord = report['10%_qc_file_records'] || report['10%_data_generated_count'] || 0;
+                  const qcRecord = report.qc_generated_count || 0;
                   
                   const amName = report.am_name || "N/A";
                   const qaName = report.qa_name || "N/A";

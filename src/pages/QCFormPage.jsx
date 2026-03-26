@@ -58,10 +58,10 @@ const QCFormPage = () => {
   const [afdData, setAfdData] = useState(null); // AFD with categories and subcategories
   const [totalRecords, setTotalRecords] = useState(0); // Total records from API
   const [sampleSize, setSampleSize] = useState(0); // Sample size from API
-  const [tenPercentFilePath, setTenPercentFilePath] = useState(''); // 10% file path from API
+  const [sampleFilePath, setSampleFilePath] = useState(''); // Sample file path from API
   
   // Use ref as backup for file path to avoid React state timing issues
-  const tenPercentFilePathRef = useRef('');
+  const sampleFilePathRef = useRef('');
   
   // Form state - errors selected for each record
   const [formRows, setFormRows] = useState([]);
@@ -84,7 +84,8 @@ const QCFormPage = () => {
   // Calculate error metrics
   const errorMetrics = useMemo(() => {
     const recordCount = formRows.length;
-    const tenPercentCount = Math.ceil(recordCount * 0.1);
+    const samplingPercentage = trackerData?.qc_percentage || 10;
+    const sampleCount = Math.ceil(recordCount * (samplingPercentage / 100));
     
     // Count total errors marked
     const totalErrors = formRows.reduce((sum, row) => sum + row.errors.length, 0);
@@ -109,21 +110,22 @@ const QCFormPage = () => {
     }));
     
     // Determine status based on score
-    // Above 90: regular, Below 90: rework
-    // Correction is only sent when user explicitly clicks Correction button
+    // 100: regular, 98-99.99: correction, Below 98: rework
     let status = 'regular';
-    if (qcScore < 90) {
+    if (qcScore < 98) {
       status = 'rework';
+    } else if (qcScore < 100) {
+      status = 'correction';
     }
     
     return {
       recordCount,
-      tenPercentCount,
+      sampleCount,
       totalErrors,
       errorList,
       status
     };
-  }, [formRows, afdData, qcScore]);
+  }, [formRows, afdData, qcScore, trackerData?.qc_percentage]);
 
   // Lazy loading - calculate visible rows and pagination
   const visibleFormRows = formRows.slice(0, displayedRows);
@@ -192,7 +194,7 @@ const QCFormPage = () => {
           const sampleResponse = await generateQCSample(
             trackerData.tracker_id,
             user.user_id,
-            trackerData.qc_percentage
+            trackerData.qc_percentage || 10
           );
           
           // Log full response structure to debug - IMMEDIATELY after receiving
@@ -243,17 +245,17 @@ const QCFormPage = () => {
             
             setTotalRecords(apiTotalRecords);
             setSampleSize(apiSampleSize);
-            setTenPercentFilePath(apiFilePath);
-            tenPercentFilePathRef.current = apiFilePath; // Also store in ref
+            setSampleFilePath(apiFilePath);
+            sampleFilePathRef.current = apiFilePath; // Also store in ref
             
             console.log('[QCFormPage] ===== STATE VALUES SET =====');
             console.log('[QCFormPage] Sample data generated, records count:', sampleData.length);
             console.log('[QCFormPage] Total Records:', apiTotalRecords, 'Sample Size:', apiSampleSize);
-            console.log('[QCFormPage] 10% File Path extracted:', apiFilePath);
-            console.log('[QCFormPage] 10% File Path set in state:', apiFilePath);
-            console.log('[QCFormPage] 10% File Path set in ref:', tenPercentFilePathRef.current);
-            console.log('[QCFormPage] 10% File Path length:', apiFilePath?.length || 0);
-            console.log('[QCFormPage] 10% File Path is empty?:', !apiFilePath);
+            console.log('[QCFormPage] Sample File Path extracted:', apiFilePath);
+            console.log('[QCFormPage] Sample File Path set in state:', apiFilePath);
+            console.log('[QCFormPage] Sample File Path set in ref:', sampleFilePathRef.current);
+            console.log('[QCFormPage] Sample File Path length:', apiFilePath?.length || 0);
+            console.log('[QCFormPage] Sample File Path is empty?:', !apiFilePath);
             console.log('[QCFormPage] Response data keys:', Object.keys(sampleResponse.data || {}));
             console.log('[QCFormPage] ===== STATE VALUES END =====');
           } else {
@@ -287,19 +289,22 @@ const QCFormPage = () => {
 
   // Add error to a record
   const handleAddError = (rowIndex, categoryId, subcategoryId) => {
-    const updatedRows = [...formRows];
-    const row = updatedRows[rowIndex];
-    
-    // Check if error already exists
-    const errorExists = row.errors.some(
-      err => err.categoryId === categoryId && err.subcategoryId === subcategoryId
-    );
-    
-    if (!errorExists) {
-      row.errors.push({ categoryId, subcategoryId });
-      setFormRows(updatedRows);
-      calculateQCScore(updatedRows, afdData);
-    }
+    setFormRows(prevRows => {
+      const updatedRows = [...prevRows];
+      const row = updatedRows[rowIndex];
+      
+      // Check if error already exists in this row
+      const errorExists = row.errors.some(
+        err => err.categoryId === categoryId && err.subcategoryId === subcategoryId
+      );
+      
+      if (!errorExists) {
+        row.errors.push({ categoryId, subcategoryId });
+        // Trigger score calculation after state update
+        setTimeout(() => calculateQCScore(updatedRows, afdData), 0);
+      }
+      return updatedRows;
+    });
   };
 
   // Update pending selection for a row
@@ -321,10 +326,13 @@ const QCFormPage = () => {
 
   // Remove error from a record
   const handleRemoveError = (rowIndex, errorIndex) => {
-    const updatedRows = [...formRows];
-    updatedRows[rowIndex].errors.splice(errorIndex, 1);
-    setFormRows(updatedRows);
-    calculateQCScore(updatedRows, afdData);
+    setFormRows(prevRows => {
+      const updatedRows = [...prevRows];
+      updatedRows[rowIndex].errors.splice(errorIndex, 1);
+      // Trigger score calculation after state update
+      setTimeout(() => calculateQCScore(updatedRows, afdData), 0);
+      return updatedRows;
+    });
   };
 
   // Calculate QC Score for all records
@@ -601,16 +609,16 @@ const QCFormPage = () => {
         is_valid: ass_manager_id !== null && ass_manager_id > 0
       });
 
-      // Log the 10% file path before creating payload
+      // Log the sample file path before creating payload
       console.log('[QCFormPage] ===== PRE-SUBMISSION FILE PATH CHECK =====');
-      console.log('[QCFormPage] Before payload - tenPercentFilePath state:', tenPercentFilePath);
-      console.log('[QCFormPage] Before payload - tenPercentFilePathRef.current:', tenPercentFilePathRef.current);
-      console.log('[QCFormPage] Before payload - tenPercentFilePath type:', typeof tenPercentFilePath);
-      console.log('[QCFormPage] Before payload - tenPercentFilePath is empty?:', !tenPercentFilePath);
-      console.log('[QCFormPage] Before payload - ref is empty?:', !tenPercentFilePathRef.current);
+      console.log('[QCFormPage] Before payload - sampleFilePath state:', sampleFilePath);
+      console.log('[QCFormPage] Before payload - sampleFilePathRef.current:', sampleFilePathRef.current);
+      console.log('[QCFormPage] Before payload - sampleFilePath type:', typeof sampleFilePath);
+      console.log('[QCFormPage] Before payload - sampleFilePath is empty?:', !sampleFilePath);
+      console.log('[QCFormPage] Before payload - ref is empty?:', !sampleFilePathRef.current);
       
       // Use ref value as fallback if state is empty (React state timing issue)
-      const filePathToUse = tenPercentFilePath || tenPercentFilePathRef.current || '';
+      const filePathToUse = sampleFilePath || sampleFilePathRef.current || '';
       console.log('[QCFormPage] File path to use in payload:', filePathToUse);
       console.log('[QCFormPage] ===== END PRE-SUBMISSION FILE PATH CHECK =====');
 
@@ -621,47 +629,46 @@ const QCFormPage = () => {
         tracker_id: trackerData.tracker_id,
         
         // Database Fields (matching exact schema)
-        ass_manager_id: ass_manager_id, // Will be null if not found (not 0)
-        qc_user_id: user?.user_id || user?.id,
-        agent_user_id: trackerData.user_id || trackerData.agent_user_id || trackerData.agent_id,
+        assistant_manager_id: ass_manager_id, 
+        qa_user_id: user?.user_id || user?.id,
+        agent_id: trackerData.user_id || trackerData.agent_user_id || trackerData.agent_id,
         project_id: trackerData.project_id,
         task_id: trackerData.task_id,
-        file_path: trackerData.tracker_file || trackerData.file_path || '',
-        '10%_file_path': filePathToUse, // 10% sample file path - BACKEND MUST ACCEPT THIS FIELD
+        whole_file_path: trackerData.tracker_file || trackerData.file_path || '',
+        qc_file_path: filePathToUse, 
         date_of_file_submission: formattedDate,
         qc_score: parseFloat(qcScore.toFixed(2)),
         status: status,
         file_record_count: totalRecords || errorMetrics.recordCount,
-        data_generated_count: sampleSize || errorMetrics.tenPercentCount, // 10% data generated count
-        qc_file_records: formData, // The actual 10% sample data records for Cloudinary Excel generation
-        error_score: parseFloat((100 - qcScore).toFixed(2)),
-        error_list: errorList, // Array of error objects with category, subcategory, row, points
-        comments: comments || ''
+        qc_generated_count: sampleSize || errorMetrics.sampleCount, 
+        qc_file_records: formData, 
+        error_list: errorList, 
+        comments: comments || '',
+        sampling_percentage: trackerData.qc_percentage || 10
       };
 
       console.log('[QCFormPage] Tracker Data:', trackerData);
       console.log('[QCFormPage] User Data:', user);
       console.log('[QCFormPage] Submitting QC record with payload:', JSON.stringify(payload, null, 2));
       console.log('[QCFormPage] Payload field validation:', {
-        ass_manager_id: payload.ass_manager_id,
-        qc_user_id: payload.qc_user_id,
-        agent_user_id: payload.agent_user_id,
+        assistant_manager_id: payload.assistant_manager_id,
+        qa_user_id: payload.qa_user_id,
+        agent_id: payload.agent_id,
         project_id: payload.project_id,
         task_id: payload.task_id,
-        file_path: payload.file_path,
-        '10%_file_path': payload['10%_file_path'],
+        whole_file_path: payload.whole_file_path,
+        qc_file_path: payload.qc_file_path,
         date_of_file_submission: payload.date_of_file_submission,
         qc_score: payload.qc_score,
         status: payload.status,
         file_record_count: payload.file_record_count,
-        data_generated_count: payload.data_generated_count,
+        qc_generated_count: payload.qc_generated_count,
         qc_file_records_count: payload.qc_file_records?.length,
-        error_score: payload.error_score,
         error_list_count: payload.error_list.length
       });
 
       // Validate required fields
-      const requiredFields = ['qc_user_id', 'agent_user_id', 'project_id', 'task_id', 'date_of_file_submission'];
+      const requiredFields = ['qa_user_id', 'agent_id', 'project_id', 'task_id', 'date_of_file_submission'];
       const missingFields = requiredFields.filter(field => !payload[field]);
       
       if (missingFields.length > 0) {
@@ -727,7 +734,7 @@ const QCFormPage = () => {
       const fileUrl = `${backendUrl}/qc-records/download-sample/${trackerData.tracker_id}?logged_in_user_id=${user?.user_id}`;
       // Open the streaming API endpoint directly to trigger browser download
       window.open(fileUrl, '_blank');
-      toast.success('Downloading 10% sample file...');
+      toast.success(`Downloading ${trackerData.qc_percentage || 10}% sample file...`);
     } else {
       toast.error('No file available for download');
     }
@@ -1327,13 +1334,13 @@ const QCFormPage = () => {
           Cancel
         </button>
         
-        {/* Correction Button - Always visible */}
+        {/* Action Buttons with strict validation */}
         <button
           onClick={handleCorrection}
-          disabled={saving}
+          disabled={saving || qcScore >= 100 || qcScore < 98}
           className="px-6 py-3 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2"
         >
-          {saving ? (
+          {saving && submissionType === 'correction' ? (
             <>
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               Processing...
@@ -1346,45 +1353,41 @@ const QCFormPage = () => {
           )}
         </button>
 
-        {/* Conditional Submit Button based on QC Score */}
-        {qcScore >= 90 && (
-          <button
-            onClick={handleRegularSubmit}
-            disabled={saving}
-            className="px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2"
-          >
-            {saving ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Submitting...
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="w-5 h-5" />
-                Regular Submit
-              </>
-            )}
-          </button>
-        )}
-        {qcScore < 90 && (
-          <button
-            onClick={handleReworkSubmit}
-            disabled={saving}
-            className="px-8 py-3 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2"
-          >
-            {saving ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Submitting...
-              </>
-            ) : (
-              <>
-                <Send className="w-5 h-5" />
-                Rework Submit
-              </>
-            )}
-          </button>
-        )}
+        <button
+          onClick={handleRegularSubmit}
+          disabled={saving || qcScore < 100}
+          className="px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+        >
+          {saving && submissionType === 'regular' ? (
+            <>
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Submitting...
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="w-5 h-5" />
+              Regular Submit
+            </>
+          )}
+        </button>
+
+        <button
+          onClick={handleReworkSubmit}
+          disabled={saving || qcScore >= 98}
+          className="px-8 py-3 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+        >
+          {saving && submissionType === 'rework' ? (
+            <>
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Submitting...
+            </>
+          ) : (
+            <>
+              <Send className="w-5 h-5" />
+              Rework Submit
+            </>
+          )}
+        </button>
       </div>
       </div>
 

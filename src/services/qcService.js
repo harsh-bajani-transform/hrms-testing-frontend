@@ -114,19 +114,19 @@ export const generateQCSample = async (tracker_id, logged_in_user_id, sampling_p
  * @param {Object} payload - Complete QC form data payload
  * @param {number} payload.logged_in_user_id - Logged in user ID (for authentication)
  * @param {number} payload.tracker_id - Tracker ID reference
- * @param {number|null} payload.ass_manager_id - Assistant Manager ID
- * @param {number} payload.qc_user_id - QA User ID (who performed the QC)
- * @param {number} payload.agent_user_id - Agent User ID (whose work is being checked)
+ * @param {number|null} payload.assistant_manager_id - Assistant Manager ID
+ * @param {number} payload.qa_user_id - QA User ID (who performed the QC)
+ * @param {number} payload.agent_id - Agent User ID (whose work is being checked)
  * @param {number} payload.project_id - Project ID
  * @param {number} payload.task_id - Task ID
- * @param {string} payload.file_path - File path/URL
+ * @param {string} payload.whole_file_path - File path/URL of the full tracker
+ * @param {string} payload.qc_file_path - File path/URL of the sampled QC file
  * @param {string} payload.date_of_file_submission - Date of file submission (YYYY-MM-DD)
  * @param {number} payload.qc_score - Final QC Score (0-100)
  * @param {string} payload.status - Status (Approved/Rework/Correction)
  * @param {number} payload.file_record_count - Total records in file
- * @param {number} payload.data_generated_count - 10% data generated count
- * @param {number} payload.qc_file_records - 10% QC file records count
- * @param {number} payload.error_score - Error score (100 - qc_score)
+ * @param {number} payload.qc_generated_count - QC sample data generated count
+ * @param {Array} payload.qc_file_records - The sampled records data
  * @param {Array} payload.error_list - List of errors with category, subcategory, row, points
  * @param {string} payload.comments - QC comments
  * @returns {Promise} Response data
