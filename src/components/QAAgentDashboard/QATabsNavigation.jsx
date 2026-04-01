@@ -4,7 +4,8 @@ import {
   Briefcase,
   FileCheck,
   FileWarning,
-  DollarSign
+  DollarSign,
+  RotateCcw
 } from 'lucide-react';
 
 const QATabsNavigation = ({ activeTab, setActiveTab }) => {

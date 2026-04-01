@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import { Download, Trash2, RotateCcw, RefreshCw, Copy, ChevronDown, Clock, Info } from "lucide-react";
-import * as XLSX from 'xlsx';
+import { exportToCSV } from '../../utils/csvExport';
 import AppLayout from "../../layouts/AppLayout";
 import api from "../../services/api";
 import nodeApi from "../../services/nodeApi";
@@ -936,7 +936,7 @@ const Tracker = ({ embedded = false }) => {
     }, { tenureTarget: 0, production: 0, billableHours: 0 });
   }, [trackers]);
 
-  // Export to Excel
+  // Export to CSV
   const handleExportToExcel = () => {
     if (trackers.length === 0) {
       toast.error("No data to export");
@@ -970,27 +970,11 @@ const Tracker = ({ embedded = false }) => {
         'Has File': ''
       });
 
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-      worksheet['!cols'] = [
-        { wch: 18 },
-        { wch: 20 },
-        { wch: 25 },
-        { wch: 10 },
-        { wch: 15 },
-        { wch: 12 },
-        { wch: 15 },
-        { wch: 30 },
-        { wch: 10 }
-      ];
-
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Trackers');
-
-      const filename = `Trackers_${startDate}_to_${endDate}.xlsx`;
-      XLSX.writeFile(workbook, filename);
+      const filename = `Trackers_${startDate}_to_${endDate}.csv`;
+      exportToCSV(exportData, filename);
 
       toast.success(`Exported ${trackers.length} records successfully!`);
-      log('[Tracker] Excel export successful:', filename);
+      log('[Tracker] CSV export successful:', filename);
     } catch (err) {
       logError('[Tracker] Excel export error:', err);
       toast.error("Failed to export data");
@@ -1219,7 +1203,7 @@ const Tracker = ({ embedded = false }) => {
                   onClick={handleExportToExcel}
                   disabled={loading || trackers.length === 0}
                   className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-bold text-sm shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
-                  title="Export filtered data to Excel"
+                  title="Export filtered data to CSV"
                 >
                   <Download className="w-4 h-4" />
                   Export

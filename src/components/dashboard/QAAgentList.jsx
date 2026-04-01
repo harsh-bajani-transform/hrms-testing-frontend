@@ -6,21 +6,236 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { format } from "date-fns";
-import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RotateCcw, Check, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RotateCcw, Check, Loader2, RefreshCw, AlertTriangle, XCircle, AlertCircle, CheckCircle2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import api from "../../services/api";
-import nodeApi from "../../services/nodeApi";
 import { fetchProjectCategoryAFD, generateQCSample } from "../../services/qcService";
 import { useAuth } from "../../context/AuthContext";
 import { useDeviceInfo } from "../../hooks/useDeviceInfo";
 import { log, logError } from "../../config/environment";
-import { DateRangePicker } from "../common/CustomCalendar";
-import QCFormReportView from "./QCFormReportView";
+import QAAgentQCFormReport from "./QAAgentQCFormReport";
+import QAAgentReworkCorrectionReview from "./QAAgentReworkCorrectionReview";
 
 // Helper to get today's date in YYYY-MM-DD format
 const getTodayDate = () => {
   const today = new Date();
   return today.toISOString().split('T')[0];
+};
+
+// Pending QC Files Table Component
+const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading }) => {
+  const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return '—';
+    const date = new Date(dateString);
+    return date.toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  const getScoreClass = (score) => {
+    if (score === null || score === undefined) return 'text-slate-400';
+    if (score === 100) return 'text-green-600 font-bold';
+    if (score >= 95) return 'text-yellow-600 font-bold';
+    return 'text-red-600 font-bold';
+  };
+
+  const parseErrors = (errors) => {
+    if (!errors) return [];
+    if (typeof errors === 'string') {
+      try { return JSON.parse(errors); } catch { return []; }
+    }
+    return Array.isArray(errors) ? errors : [];
+  };
+
+  const openErrorModal = (errors, title) => {
+    setErrorModal({ open: true, errors: parseErrors(errors), title });
+  };
+
+  const getTypeBadge = (type) => {
+    if (type === 'rework') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-700">
+          <XCircle className="w-3 h-3" /> Rework
+        </span>
+      );
+    } else if (type === 'correction') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-700">
+          <AlertCircle className="w-3 h-3" /> Correction
+        </span>
+      );
+    }
+    return <span className="text-xs text-slate-500">—</span>;
+  };
+
+  return (
+    <>
+      <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold">Type</th>
+              <th className="px-4 py-3 text-left font-semibold">Project / Task</th>
+              <th className="px-4 py-3 text-left font-semibold">Submitted Date & Time</th>
+              <th className="px-4 py-3 text-center font-semibold">Attempt</th>
+              <th className="px-4 py-3 text-center font-semibold">Previous Score</th>
+              <th className="px-4 py-3 text-center font-semibold">Previous Errors</th>
+              <th className="px-4 py-3 text-center font-semibold">File</th>
+              <th className="px-4 py-3 text-center font-semibold">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {trackers.map((tracker, index) => {
+              const errors = parseErrors(tracker.previous_error_list);
+              const trackerId = tracker.qc_record_id || tracker.id || `tracker-${index}`;
+              return (
+                <tr key={trackerId} className="hover:bg-slate-50">
+                  <td className="px-4 py-3">
+                    {getTypeBadge(tracker.type)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div>
+                      <p className="font-medium text-slate-800">{tracker.project_name || '—'}</p>
+                      <p className="text-xs text-slate-500">{tracker.task_name || '—'}</p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {formatDateTime(tracker.updated_at)}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="px-2 py-1 rounded text-xs font-bold bg-blue-100 text-blue-700">
+                      {tracker.attempt || '—'}
+                    </span>
+                  </td>
+                  <td className={`px-4 py-3 text-center ${getScoreClass(tracker.previous_qc_score)}`}>
+                    {tracker.previous_qc_score !== null && tracker.previous_qc_score !== undefined ? `${tracker.previous_qc_score}%` : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {errors.length > 0 ? (
+                      <button
+                        onClick={() => openErrorModal(tracker.previous_error_list, `Previous Errors - ${tracker.type === 'rework' ? 'Rework' : 'Correction'} #${tracker.attempt}`)}
+                        className="relative inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold transition-colors"
+                      >
+                        View
+                        <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] flex items-center justify-center px-1 rounded-full bg-rose-700 text-white text-xs font-bold">
+                          {errors.length}
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-green-50 text-green-600 text-xs font-medium">
+                        <CheckCircle2 className="w-3 h-3" /> None
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {tracker.file_path ? (
+                      <a
+                        href={tracker.file_path}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600 transition-colors"
+                        title="Download File"
+                      >
+                        <Download className="w-4 h-4" />
+                      </a>
+                    ) : (
+                      <span className="text-slate-400 text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {tracker.type === 'rework' ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // tracker_id is now included from API response
+                          handleQCForm(tracker);
+                        }}
+                        disabled={qcFormLoading === trackerId}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-slate-400 text-white text-xs font-semibold transition-colors"
+                      >
+                        {qcFormLoading === trackerId ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Loading
+                          </>
+                        ) : (
+                          <>
+                            <FileCheck className="w-3 h-3" />
+                            QC Form
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <span className="text-slate-400 text-xs">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Error Modal */}
+      {errorModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setErrorModal({ open: false, errors: [], title: '' })}></div>
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-gradient-to-r from-blue-600 to-indigo-600">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">{errorModal.title}</h3>
+                  <p className="text-blue-100 text-sm">{errorModal.errors.length} error{errorModal.errors.length !== 1 ? 's' : ''} found</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setErrorModal({ open: false, errors: [], title: '' })}
+                className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="space-y-2">
+                {errorModal.errors.map((err, idx) => (
+                  <div key={idx} className="flex items-start gap-3 p-3 bg-rose-50 border border-rose-200 rounded-lg">
+                    <span className="shrink-0 w-8 h-8 rounded-full bg-rose-400 text-white text-xs font-bold flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        {err.row && <span className="px-2 py-0.5 bg-rose-400 text-white text-xs font-semibold rounded">Row {err.row}</span>}
+                        {err.points && <span className="px-2 py-0.5 bg-slate-500 text-white text-xs font-semibold rounded">-{err.points} pts</span>}
+                      </div>
+                      <p className="text-sm text-rose-700 font-medium">{err.error || `${err.category}${err.subcategory ? ` - ${err.subcategory}` : ''}`}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="px-5 py-3 border-t border-slate-200 bg-slate-50">
+              <button
+                onClick={() => setErrorModal({ open: false, errors: [], title: '' })}
+                className="w-full px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 };
 
 const QAAgentList = () => {
@@ -31,15 +246,14 @@ const QAAgentList = () => {
   const [loading, setLoading] = useState(false);
   const [agentLoading, setAgentLoading] = useState(false);
   const [qcFormLoading, setQcFormLoading] = useState(null); // Track specific tracker_id that's loading
-  const [expandedAgents, setExpandedAgents] = useState({});
   const [agentTrackers, setAgentTrackers] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
   
   // Tab state - read from URL parameter if available
   const subtabParam = searchParams.get('subtab');
   const [activeTab, setActiveTab] = useState(
-    subtabParam === 'qc_report' ? 'qc_report' : 
-    subtabParam === 'agent_rework_files' ? 'agent_rework_files' :
+    subtabParam === 'qc_report' ? 'qc_report' :
+    subtabParam === 'rework_review' ? 'rework_review' :
     'agent_files'
   );
   
@@ -101,6 +315,31 @@ const QAAgentList = () => {
             };
           }
         });
+        
+        // Also fetch pending QC files to get agents with rework/correction files
+        try {
+          const pendingQCRes = await api.post('/qc_rework/view_pending_qc_files', {});
+          const pendingRecords = pendingQCRes.data?.data?.record || [];
+          
+          // Add agents from pending QC files to agents map
+          pendingRecords.forEach(record => {
+            const agentName = record.agent_name;
+            // Try to find matching agent by name
+            const existingAgent = Object.values(agentsMap).find(a => a.user_name === agentName);
+            if (!existingAgent && agentName) {
+              // Create a new agent entry with name only (we'll use name for matching later)
+              const tempId = `temp_${agentName.replace(/\s+/g, '_')}`;
+              agentsMap[tempId] = {
+                user_id: tempId,
+                user_name: agentName,
+              };
+            }
+          });
+        } catch (err) {
+          logError('[QAAgentList] Error fetching pending QC files for agents:', err);
+          // Continue without pending QC agents
+        }
+        
         const allAgents = Object.values(agentsMap);
         
         // 3. Fetch today's tracker data to get initial file counts
@@ -163,8 +402,8 @@ const QAAgentList = () => {
 
   // Re-fetch data when tab changes and agent is selected
   useEffect(() => {
-    if (selectedAgentId && (activeTab === 'agent_files' || activeTab === 'agent_rework_files')) {
-      if (activeTab === 'agent_rework_files') {
+    if (selectedAgentId && (activeTab === 'agent_files' || activeTab === 'agent_rework_files' || activeTab === 'rework_review')) {
+      if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
         // Fetch with date filter or default to today
         const filters = agentDateFilters[selectedAgentId] || { startDate: getTodayDate(), endDate: getTodayDate() };
         fetchReworkTrackers(selectedAgentId, filters.startDate, filters.endDate);
@@ -227,40 +466,117 @@ const QAAgentList = () => {
     }
   };
 
-  // Fetch rework tracker data for specific agent with date range (frontend filtering)
+  // Fetch pending QC files data (rework & correction) for specific agent
   const fetchReworkTrackers = async (agentId, startDate = null, endDate = null) => {
     setAgentLoading(true);
     try {
-      log('[QAAgentList] Fetching rework trackers for agent:', agentId);
+      log('[QAAgentList] Fetching pending QC files for agent:', agentId);
       
-      // Call Python backend API
-      const response = await api.post('/qc_rework/view_rework_trackers', {});
+      // Call new API endpoint
+      const response = await api.post('/qc_rework/view_pending_qc_files', {});
       
-      const records = response.data?.data?.records || [];
+      const records = response.data?.data?.record || [];
+      
+      // Log the first record to see structure
+      if (records.length > 0) {
+        console.group('[QAAgentList] 🔍 API Response Analysis');
+        console.log('Sample API record structure:', records[0]);
+        console.log('Available fields:', Object.keys(records[0]));
+        console.table({
+          'tracker_id': records[0].tracker_id,
+          'agent_id': records[0].agent_id,
+          'project_id': records[0].project_id,
+          'task_id': records[0].task_id,
+          'project_category_id': records[0].project_category_id,
+          'sampling_percentage': records[0].sampling_percentage,
+          'agent_name': records[0].agent_name,
+          'project_name': records[0].project_name,
+          'task_name': records[0].task_name
+        });
+        console.log('✅ API is returning all required IDs correctly!');
+        console.groupEnd();
+      }
       
       // Find the agent name for this agentId
       const selectedAgent = agents.find(a => String(a.user_id) === String(agentId));
       const agentName = selectedAgent?.user_name;
       
-      // Filter records for this specific agent
-      let agentReworkTrackers = records
+      // Filter records for this specific agent and transform data
+      let agentPendingFiles = records
         .filter(record => record.agent_name === agentName)
-        .map(record => ({
-          id: record.id,
-          agent_name: record.agent_name,
-          worked_datetime: record.worked_datetime,
-          evaluation_datetime: record.evaluation_datetime,
-          project_name: record.project_name,
-          task_name: record.task_name,
-          status: record.status,
-          qc_score: record.qc_score,
-          rework_file_path: record.rework_file_path,
-          // For compatibility with existing table code
-          date_time: record.worked_datetime,
-          qc_datetime: record.evaluation_datetime,
-          qc_status: record.status,
-          tracker_file: record.rework_file_path
-        }));
+        .map(record => {
+          // Determine if we have rework or correction data
+          const hasRework = record.latest_rework && Object.keys(record.latest_rework).length > 0;
+          const hasCorrection = record.latest_correction && Object.keys(record.latest_correction).length > 0;
+          
+          let type, updatedAt, attempt, previousScore, previousErrors, filePath, qcRecordId, trackerFile;
+          
+          if (hasRework) {
+            type = 'rework';
+            updatedAt = record.latest_rework.updated_at;
+            attempt = record.latest_rework.rework_count;
+            previousScore = record.latest_rework.previous_qc_score;
+            previousErrors = record.latest_rework.previous_error_list;
+            filePath = record.latest_rework.rework_file_path;
+            qcRecordId = record.latest_rework.qc_record_id;
+            trackerFile = record.latest_rework.rework_file_path;
+          } else if (hasCorrection) {
+            type = 'correction';
+            updatedAt = record.latest_correction.updated_at;
+            attempt = record.latest_correction.correction_count;
+            previousScore = record.latest_correction.previous_qc_score;
+            previousErrors = record.latest_correction.previous_error_list;
+            filePath = record.latest_correction.correction_file_path;
+            qcRecordId = record.latest_correction.qc_record_id;
+            trackerFile = record.latest_correction.correction_file_path;
+          } else {
+            return null; // Skip if neither rework nor correction data exists
+          }
+          
+          return {
+            ...record, // Spread record first to get all top-level fields including IDs
+            // Override with specific nested values (these take precedence)
+            id: qcRecordId,
+            agent_name: record.agent_name,
+            project_name: record.project_name,
+            task_name: record.task_name,
+            type: type,
+            updated_at: updatedAt,
+            attempt: attempt,
+            previous_qc_score: previousScore,
+            previous_error_list: previousErrors,
+            file_path: filePath,
+            qc_record_id: qcRecordId,
+            tracker_file: trackerFile,
+            // Explicitly preserve critical IDs from API (must be explicit to avoid undefined override)
+            tracker_id: record.tracker_id,
+            agent_id: record.agent_id,
+            user_id: record.agent_id, // Use agent_id as user_id since API doesn't provide user_id
+            project_id: record.project_id,
+            task_id: record.task_id,
+            project_category_id: record.project_category_id,
+            qc_percentage: record.sampling_percentage || record.qc_percentage || 50, // API uses sampling_percentage
+            date_of_file_submission: updatedAt, // Use rework/correction updated_at as submission date
+          };
+        })
+        .filter(Boolean); // Remove null entries
+      
+      // Log the first mapped file to see structure
+      if (agentPendingFiles.length > 0) {
+        console.group('[QAAgentList] 📦 Mapped Data Analysis');
+        console.log('First mapped pending file:', agentPendingFiles[0]);
+        console.table({
+          'tracker_id': agentPendingFiles[0].tracker_id,
+          'agent_id': agentPendingFiles[0].agent_id,
+          'user_id': agentPendingFiles[0].user_id,
+          'project_id': agentPendingFiles[0].project_id,
+          'task_id': agentPendingFiles[0].task_id,
+          'project_category_id': agentPendingFiles[0].project_category_id,
+          'qc_percentage': agentPendingFiles[0].qc_percentage
+        });
+        console.log('✅ All required IDs are present and ready to pass to QC Form');
+        console.groupEnd();
+      }
       
       // Frontend date filtering if dates are provided
       if (startDate && endDate) {
@@ -269,52 +585,30 @@ const QAAgentList = () => {
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
         
-        agentReworkTrackers = agentReworkTrackers.filter(tracker => {
-          // Use worked_datetime for filtering
-          const trackerDate = new Date(tracker.worked_datetime);
-          return trackerDate >= start && trackerDate <= end;
+        agentPendingFiles = agentPendingFiles.filter(file => {
+          const fileDate = new Date(file.updated_at);
+          return fileDate >= start && fileDate <= end;
         });
         
-        log('[QAAgentList] Filtered rework trackers by date:', {
+        log('[QAAgentList] Filtered pending files by date:', {
           startDate,
           endDate,
           totalRecords: records.length,
-          filteredRecords: agentReworkTrackers.length
+          filteredRecords: agentPendingFiles.length
         });
       }
       
-      log('[QAAgentList] Found rework trackers for agent:', agentReworkTrackers.length);
+      log('[QAAgentList] Found pending QC files for agent:', agentPendingFiles.length);
       
       setAgentTrackers(prev => ({
         ...prev,
-        [agentId]: agentReworkTrackers
+        [agentId]: agentPendingFiles
       }));
     } catch (error) {
-      logError("[QAAgentList] Error fetching rework trackers:", error);
-      toast.error("Failed to fetch rework tracker data");
+      logError("[QAAgentList] Error fetching pending QC files:", error);
+      toast.error("Failed to fetch pending QC files data");
     } finally {
       setAgentLoading(false);
-    }
-  };
-
-  // Toggle agent card expansion
-  const toggleAgent = (agentId) => {
-    const isCurrentlyExpanded = expandedAgents[agentId];
-    
-    setExpandedAgents(prev => ({
-      ...prev,
-      [agentId]: !prev[agentId]
-    }));
-    
-    // If expanding (not currently expanded), fetch fresh data
-    if (!isCurrentlyExpanded) {
-      if (activeTab === 'agent_rework_files') {
-        // Fetch rework data with date filter or default to today
-        const filters = agentDateFilters[agentId] || { startDate: getTodayDate(), endDate: getTodayDate() };
-        fetchReworkTrackers(agentId, filters.startDate, filters.endDate);
-      } else {
-        fetchAgentTrackers(agentId);
-      }
     }
   };
 
@@ -361,7 +655,7 @@ const QAAgentList = () => {
     }));
     
     // Fetch updated data with new dates immediately
-    if (activeTab === 'agent_rework_files') {
+    if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
       fetchReworkTrackers(agentId, newFilters.startDate, newFilters.endDate);
     } else {
       fetchAgentTrackers(agentId, newFilters.startDate, newFilters.endDate);
@@ -381,7 +675,7 @@ const QAAgentList = () => {
     }));
     
     // Fetch updated data with new dates immediately
-    if (activeTab === 'agent_rework_files') {
+    if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
       fetchReworkTrackers(agentId, newFilters.startDate, newFilters.endDate);
     } else {
       fetchAgentTrackers(agentId, newFilters.startDate, newFilters.endDate);
@@ -396,7 +690,7 @@ const QAAgentList = () => {
       [agentId]: { startDate: today, endDate: today }
     }));
     // Fetch updated data with today's date immediately
-    if (activeTab === 'agent_rework_files') {
+    if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
       fetchReworkTrackers(agentId, today, today);
     } else {
       fetchAgentTrackers(agentId, today, today);
@@ -406,7 +700,18 @@ const QAAgentList = () => {
   // Handle QC Form action
   const navigate = useNavigate();
   const handleQCForm = async (tracker) => {
-    log('[QAAgentList] Opening QC Form for tracker:', tracker.tracker_id);
+    console.group('[QAAgentList] 🔍 QC Form Handler');
+    console.log('Tracker ID:', tracker.tracker_id);
+    console.table({
+      'tracker_id': tracker.tracker_id,
+      'agent_id': tracker.agent_id,
+      'user_id': tracker.user_id,
+      'project_id': tracker.project_id, 
+      'task_id': tracker.task_id,
+      'project_category_id': tracker.project_category_id,
+      'qc_percentage': tracker.qc_percentage
+    });
+    console.groupEnd();
     
     // Validate required data
     if (!tracker.project_category_id) {
@@ -417,6 +722,25 @@ const QAAgentList = () => {
     
     if (!user?.user_id) {
       toast.error('User not authenticated');
+      return;
+    }
+    
+    // Validate that required IDs are present
+    if (!tracker.agent_id) {
+      console.error('❌ [QAAgentList] Agent ID is missing!');
+      toast.error('Agent ID not found. Cannot proceed with QC. Check console for details.');
+      return;
+    }
+    
+    if (!tracker.project_id) {
+      console.error('❌ [QAAgentList] Project ID is missing!');
+      toast.error('Project ID not found. Cannot proceed with QC. Check console for details.');
+      return;
+    }
+    
+    if (!tracker.task_id) {
+      console.error('❌ [QAAgentList] Task ID is missing!');
+      toast.error('Task ID not found. Cannot proceed with QC. Check console for details.');
       return;
     }
     
@@ -531,75 +855,61 @@ const QAAgentList = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 py-6 px-4">
       <div className="max-w-7xl mx-auto">
-        {/* Header Section */}
+        {/* Header Section with Tabs */}
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-6 border border-slate-200">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-              <UsersIcon className="w-6 h-6 text-blue-600" />
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            {/* Left - Title */}
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <UsersIcon className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-slate-800 tracking-tight cursor-default">Agent Files & QC Report</h2>
+                <p className="text-slate-600 text-sm font-medium mt-1 cursor-default">View and manage agent files with QC forms</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-slate-800 tracking-tight cursor-default">Agent Files & QC Report</h2>
-              <p className="text-slate-600 text-sm font-medium mt-1 cursor-default">View and manage agent files with QC forms</p>
-            </div>
-          </div>
-        </div>
 
-        {/* Tabs Navigation */}
-        <div className="bg-white rounded-2xl shadow-lg mb-6 border border-slate-200 overflow-hidden">
-          <div className="grid grid-cols-3 border-b border-slate-200">
-            <button
-              onClick={() => setActiveTab('agent_files')}
-              className={`px-6 py-4 text-sm font-bold transition-all relative ${
-                activeTab === 'agent_files'
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-2">
+            {/* Right - Tabs Navigation */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setActiveTab('agent_files')}
+                className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${
+                  activeTab === 'agent_files'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
                 <FileText className="w-4 h-4" />
-                <span>Agent's File Report</span>
-              </div>
-              {activeTab === 'agent_files' && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('qc_report')}
-              className={`px-6 py-4 text-sm font-bold transition-all relative ${
-                activeTab === 'qc_report'
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-2">
+                <span>Agent's Tracker File</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('rework_review')}
+                className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${
+                  activeTab === 'rework_review'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Agent's Rework & Correction File</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('qc_report')}
+                className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${
+                  activeTab === 'qc_report'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
                 <FileCheck className="w-4 h-4" />
-                <span>QC Form Report</span>
-              </div>
-              {activeTab === 'qc_report' && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('agent_rework_files')}
-              className={`px-6 py-4 text-sm font-bold transition-all relative ${
-                activeTab === 'agent_rework_files'
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-2">
-                <RotateCcw className="w-4 h-4" />
-                <span>Agent's Rework & Correction File Report</span>
-              </div>
-              {activeTab === 'agent_rework_files' && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
-              )}
-            </button>
+                <span>QC Report</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Split View Layout - Agent Files & Rework Files */}
-        {(activeTab === 'agent_files' || activeTab === 'agent_rework_files') && (
+        {/* Split View Layout - Agent Files */}
+        {activeTab === 'agent_files' && (
           <>
         <div className="bg-white rounded-2xl shadow-xl border-2 border-slate-200 overflow-hidden" style={{ height: 'calc(100vh - 400px)', minHeight: '600px' }}>
           {loading ? (
@@ -767,27 +1077,26 @@ const QAAgentList = () => {
                   
                   return (
                     <>
-                      {/* Details Header */}
+                      {/* Header */}
                       <div className="px-6 py-5 border-b-2 border-slate-200 bg-white">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
-                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
-                              <UsersIcon className="w-8 h-8 text-white" />
+                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
+                              <UsersIcon className="w-7 h-7 text-white" />
                             </div>
                             <div>
-                              <h2 className="text-2xl font-bold text-slate-900 mb-1">{selectedAgent?.user_name}</h2>
-                              <div className="flex items-center gap-3">
-                                <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 px-3 py-1.5 rounded-lg font-bold text-sm">
-                                  <FileText className="w-4 h-4" />
-                                  <span>{trackers.length} Files</span>
-                                </div>
+                              <h2 className="text-xl font-bold text-slate-900">{selectedAgent?.user_name}</h2>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700">
+                                  {trackers.length} file{trackers.length !== 1 ? 's' : ''}
+                                </span>
                                 {trackers.length > 0 && (
-                                  <div className="text-xs text-slate-500 font-medium bg-slate-100 px-3 py-1.5 rounded-lg">
-                                    {agentDateFilters[selectedAgentId]?.startDate === agentDateFilters[selectedAgentId]?.endDate 
+                                  <span className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded">
+                                    {agentDateFilters[selectedAgentId]?.startDate === agentDateFilters[selectedAgentId]?.endDate
                                       ? format(new Date(agentDateFilters[selectedAgentId]?.startDate), 'dd MMM yyyy')
                                       : `${format(new Date(agentDateFilters[selectedAgentId]?.startDate), 'dd MMM')} - ${format(new Date(agentDateFilters[selectedAgentId]?.endDate), 'dd MMM yyyy')}`
                                     }
-                                  </div>
+                                  </span>
                                 )}
                               </div>
                             </div>
@@ -795,358 +1104,118 @@ const QAAgentList = () => {
                         </div>
                       </div>
 
-                      {/* Date Filter - Show for both agent_files and agent_rework_files tabs */}
-                      {(activeTab === 'agent_files' || activeTab === 'agent_rework_files') && (
-                      <div className="px-6 py-4 bg-white border-b-2 border-slate-200">
-                        <div className="flex flex-wrap items-end gap-4">
-                          <div className="flex-1 min-w-[320px]">
-                            <DateRangePicker
-                              startDate={agentDateFilters[selectedAgentId]?.startDate || getTodayDate()}
-                              endDate={agentDateFilters[selectedAgentId]?.endDate || getTodayDate()}
-                              onStartDateChange={(dateValue) => handleAgentStartDateChange(selectedAgentId, dateValue)}
-                              onEndDateChange={(dateValue) => handleAgentEndDateChange(selectedAgentId, dateValue)}
-                              label="Filter by Date Range"
-                              description={null}
-                              showClearButton={false}
-                              compact={true}
-                              noWrapper={true}
+                      {/* Date Filter */}
+                      <div className="px-6 py-3 bg-white border-b border-slate-200">
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs font-semibold text-slate-600">From:</label>
+                            <input
+                              type="date"
+                              value={agentDateFilters[selectedAgentId]?.startDate || getTodayDate()}
+                              onChange={(e) => handleAgentStartDateChange(selectedAgentId, e.target.value)}
+                              className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:border-blue-500 outline-none"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs font-semibold text-slate-600">To:</label>
+                            <input
+                              type="date"
+                              value={agentDateFilters[selectedAgentId]?.endDate || getTodayDate()}
+                              onChange={(e) => handleAgentEndDateChange(selectedAgentId, e.target.value)}
+                              className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:border-blue-500 outline-none"
                             />
                           </div>
                           <button
                             onClick={() => handleResetAgentFilters(selectedAgentId)}
-                            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm shadow-md hover:shadow-xl transition-all duration-300 group"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium transition-colors"
                             type="button"
                           >
-                            <RotateCcw className="w-4 h-4 group-hover:rotate-[-360deg] transition-transform duration-500" />
-                            <span>Reset to Today</span>
+                            <RotateCcw className="w-3 h-3" />
+                            Today
                           </button>
                         </div>
                       </div>
-                      )}
 
                       {/* Files Table */}
                       <div className="flex-1 overflow-y-auto p-6">
                         {trackers.length > 0 ? (
-                          <div className="bg-white rounded-2xl shadow-xl overflow-hidden border-2 border-slate-200">
-                            <div className="overflow-x-auto">
-                              <table className="min-w-full">
-                                <thead className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 sticky top-0">
-                                  <tr>
-                                    {activeTab === 'agent_rework_files' ? (
-                                      <>
-                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
-                                          <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-white rounded-full"></div>
-                                            Worked Date & Time
-                                          </div>
-                                        </th>
-                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
-                                          <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-white rounded-full"></div>
-                                            Evaluation Date & Time
-                                          </div>
-                                        </th>
-                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
-                                          <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-white rounded-full"></div>
-                                            Project
-                                          </div>
-                                        </th>
-                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
-                                          <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-white rounded-full"></div>
-                                            Task
-                                          </div>
-                                        </th>
-                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
-                                          <div className="flex items-center justify-center gap-2">
-                                            <div className="w-2 h-2 bg-white rounded-full"></div>
-                                            Status
-                                          </div>
-                                        </th>
-                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
-                                          <div className="flex items-center justify-center gap-2">
-                                            <div className="w-2 h-2 bg-white rounded-full"></div>
-                                            QC Score
-                                          </div>
-                                        </th>
-                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
-                                          <div className="flex items-center justify-center gap-2">
-                                            <div className="w-2 h-2 bg-white rounded-full"></div>
-                                            File
-                                          </div>
-                                        </th>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
-                                          <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-white rounded-full"></div>
-                                            Date & Time
-                                          </div>
-                                        </th>
-                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
-                                          <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-white rounded-full"></div>
-                                            Project
-                                          </div>
-                                        </th>
-                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">
-                                          <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-white rounded-full"></div>
-                                            Task
-                                          </div>
-                                        </th>
-                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
-                                          <div className="flex items-center justify-center gap-2">
-                                            <div className="w-2 h-2 bg-white rounded-full"></div>
-                                            File
-                                          </div>
-                                        </th>
-                                        <th className="px-6 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">
-                                          <div className="flex items-center justify-center gap-2">
-                                            <div className="w-2 h-2 bg-white rounded-full"></div>
-                                            Action
-                                          </div>
-                                        </th>
-                                      </>
-                                    )}
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                  {trackers.map((tracker, index) => {
-                                    // Helper function to format date/time
-                                    const formatDateTime = (dateTimeStr) => {
-                                      if (!dateTimeStr) return { date: '—', time: '—' };
-                                      try {
-                                        const date = new Date(dateTimeStr);
-                                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                                        const day = date.getUTCDate();
-                                        const month = monthNames[date.getUTCMonth()];
-                                        const year = date.getUTCFullYear();
-                                        let hours = date.getUTCHours();
-                                        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-                                        const ampm = hours >= 12 ? 'PM' : 'AM';
-                                        hours = hours % 12 || 12;
-                                        return {
-                                          date: `${day} ${month} ${year}`,
-                                          time: `${hours}:${minutes} ${ampm}`
-                                        };
-                                      } catch {
-                                        return { date: '—', time: '—' };
-                                      }
-                                    };
+                          <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+                                <tr>
+                                  <th className="px-4 py-3 text-left font-semibold">Date & Time</th>
+                                  <th className="px-4 py-3 text-left font-semibold">Project / Task</th>
+                                  <th className="px-4 py-3 text-center font-semibold">File</th>
+                                  <th className="px-4 py-3 text-center font-semibold">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {trackers.map((tracker, index) => {
+                                  const formatDate = (dateTimeStr) => {
+                                    if (!dateTimeStr) return '—';
+                                    const date = new Date(dateTimeStr);
+                                    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                                  };
 
-                                    // Helper function to get status badge class
-                                    const getStatusBadgeClass = (status) => {
-                                      if (!status) return 'bg-slate-100 text-slate-700';
-                                      const statusLower = status.toLowerCase();
-                                      if (statusLower === 'regular' || statusLower === 'approved') return 'bg-green-100 text-green-800';
-                                      if (statusLower === 'rework') return 'bg-yellow-100 text-yellow-800';
-                                      if (statusLower === 'correction') return 'bg-red-100 text-red-800';
-                                      return 'bg-slate-100 text-slate-700';
-                                    };
-
-                                    // Helper function to get QC score color class
-                                    const getQCScoreColorClass = (score) => {
-                                      if (score === null || score === undefined || score === '-' || isNaN(Number(score))) return 'text-slate-700 bg-slate-100';
-                                      const numScore = Number(score);
-                                      if (numScore >= 95) return 'text-green-800 bg-green-100 font-bold';
-                                      if (numScore >= 80) return 'text-yellow-700 bg-yellow-100 font-bold';
-                                      return 'text-red-700 bg-red-100 font-bold';
-                                    };
-
-                                    const workedDateTime = formatDateTime(tracker.date_time || tracker.tracker_datetime);
-                                    const evaluationDateTime = formatDateTime(tracker.qc_datetime || tracker.evaluation_datetime || tracker.qc_evaluation_date);
-
-                                    return (
-                                    <tr
-                                      key={tracker.tracker_id || index}
-                                      className={`transition-all duration-200 group ${
-                                        index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
-                                      } hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50`}
-                                    >
-                                      {activeTab === 'agent_rework_files' ? (
-                                        <>
-                                          {/* Worked Date & Time */}
-                                          <td className="px-6 py-4 align-middle">
-                                            <div>
-                                              <div className="font-bold text-slate-900 text-sm">{workedDateTime.date}</div>
-                                              <div className="text-xs text-slate-500 font-medium mt-0.5">
-                                                <span className="bg-slate-100 px-2 py-0.5 rounded">
-                                                  {workedDateTime.time}
-                                                </span>
-                                              </div>
-                                            </div>
-                                          </td>
-                                          {/* Evaluation Date & Time */}
-                                          <td className="px-6 py-4 align-middle">
-                                            <div>
-                                              <div className="font-semibold text-slate-800 text-sm">{evaluationDateTime.date}</div>
-                                              <div className="text-xs text-slate-500 font-medium mt-0.5">
-                                                <span className="bg-blue-50 px-2 py-0.5 rounded">
-                                                  {evaluationDateTime.time}
-                                                </span>
-                                              </div>
-                                            </div>
-                                          </td>
-                                          {/* Project */}
-                                          <td className="px-6 py-4 align-middle">
-                                            <div className="inline-flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100">
-                                              <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-                                              <span className="font-bold text-blue-700 text-sm">
-                                                {tracker.project_name || "—"}
-                                              </span>
-                                            </div>
-                                          </td>
-                                          {/* Task */}
-                                          <td className="px-6 py-4 align-middle">
-                                            <span className="text-slate-700 font-medium text-sm">
-                                              {tracker.task_name || "—"}
-                                            </span>
-                                          </td>
-                                          {/* Status */}
-                                          <td className="px-6 py-4 align-middle text-center">
-                                            <span className={`px-3 py-1.5 rounded-lg font-semibold text-sm inline-block ${getStatusBadgeClass(tracker.qc_status || tracker.status)}`}>
-                                              {tracker.qc_status || tracker.status || '—'}
-                                            </span>
-                                          </td>
-                                          {/* QC Score */}
-                                          <td className="px-6 py-4 align-middle text-center">
-                                            <span className={`px-3 py-1.5 rounded-lg inline-block text-sm font-bold ${getQCScoreColorClass(tracker.qc_score || tracker.score)}`}>
-                                              {(tracker.qc_score != null || tracker.score != null) ? `${Number(tracker.qc_score || tracker.score).toFixed(2)}%` : '—'}
-                                            </span>
-                                          </td>
-                                          {/* File */}
-                                          <td className="px-6 py-4 align-middle text-center">
-                                            {tracker.tracker_file ? (
-                                              <a
-                                                href={tracker.tracker_file}
-                                                download
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex items-center justify-center w-12 h-12 text-green-600 hover:text-white bg-green-50 hover:bg-gradient-to-br hover:from-green-600 hover:to-emerald-600 transition-all duration-300 rounded-xl shadow-sm hover:shadow-lg group/download"
-                                                title="Download file"
-                                                onClick={(e) => e.stopPropagation()}
-                                              >
-                                                <Download className="w-5 h-5 group-hover/download:scale-110 transition-transform" />
-                                              </a>
-                                            ) : (
-                                              <span className="text-slate-300 text-sm">No file</span>
-                                            )}
-                                          </td>
-                                        </>
-                                      ) : (
-                                        <>
-                                          {/* Date & Time (Original design for agent_files tab) */}
-                                          <td className="px-6 py-4 align-middle">
-                                            <div className="flex items-center gap-3">
-                                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200 shadow-sm">
-                                                <FileText className="w-5 h-5 text-blue-600" />
-                                              </div>
-                                              <div>
-                                                {tracker.date_time ? (() => {
-                                                  const date = new Date(tracker.date_time);
-                                                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                                                  const day = date.getUTCDate();
-                                                  const month = monthNames[date.getUTCMonth()];
-                                                  const year = date.getUTCFullYear();
-                                                  let hours = date.getUTCHours();
-                                                  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-                                                  const ampm = hours >= 12 ? 'PM' : 'AM';
-                                                  hours = hours % 12 || 12;
-                                                  return (
-                                                    <>
-                                                      <div className="font-bold text-slate-900 text-sm">{day} {month} {year}</div>
-                                                      <div className="text-xs text-slate-500 font-medium mt-0.5">
-                                                        <span className="bg-slate-100 px-2 py-0.5 rounded">
-                                                          {hours}:{minutes} {ampm}
-                                                        </span>
-                                                      </div>
-                                                    </>
-                                                  );
-                                                })() : (
-                                                  <span className="text-slate-400">—</span>
-                                                )}
-                                              </div>
-                                            </div>
-                                          </td>
-                                          {/* Project */}
-                                          <td className="px-6 py-4 align-middle">
-                                            <div className="inline-flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100">
-                                              <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-                                              <span className="font-bold text-blue-700 text-sm">
-                                                {tracker.project_name || "—"}
-                                              </span>
-                                            </div>
-                                          </td>
-                                          {/* Task */}
-                                          <td className="px-6 py-4 align-middle">
-                                            <span className="text-slate-700 font-medium text-sm">
-                                              {tracker.task_name || "—"}
-                                            </span>
-                                          </td>
-                                          {/* File */}
-                                          <td className="px-6 py-4 align-middle text-center">
-                                            {tracker.tracker_file ? (
-                                              <a
-                                                href={tracker.tracker_file}
-                                                download
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex items-center justify-center w-12 h-12 text-green-600 hover:text-white bg-green-50 hover:bg-gradient-to-br hover:from-green-600 hover:to-emerald-600 transition-all duration-300 rounded-xl shadow-sm hover:shadow-lg group/download"
-                                                title="Download file"
-                                                onClick={(e) => e.stopPropagation()}
-                                              >
-                                                <Download className="w-5 h-5 group-hover/download:scale-110 transition-transform" />
-                                              </a>
-                                            ) : (
-                                              <span className="text-slate-300 text-sm">No file</span>
-                                            )}
-                                          </td>
-                                          {/* Action */}
-                                          <td className="px-6 py-4 align-middle text-center">
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleQCForm(tracker);
-                                              }}
-                                              disabled={qcFormLoading === tracker.tracker_id}
-                                              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-700 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed disabled:transform-none text-white text-sm font-bold rounded-xl transition-all duration-300 shadow-md hover:shadow-xl transform hover:scale-105 group/btn"
-                                            >
-                                              {qcFormLoading === tracker.tracker_id ? (
-                                                <>
-                                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                                  <span>Loading...</span>
-                                                </>
-                                              ) : (
-                                                <>
-                                                  <FileCheck className="w-4 h-4 group-hover/btn:rotate-12 transition-transform" />
-                                                  <span>QC Form</span>
-                                                </>
-                                              )}
-                                            </button>
-                                          </td>
-                                        </>
-                                      )}
+                                  return (
+                                    <tr key={tracker.tracker_id || index} className="hover:bg-slate-50">
+                                      <td className="px-4 py-3 text-slate-600">
+                                        {formatDate(tracker.date_time || tracker.tracker_datetime)}
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        <div>
+                                          <p className="font-medium text-slate-800">{tracker.project_name || '—'}</p>
+                                          <p className="text-xs text-slate-500">{tracker.task_name || '—'}</p>
+                                        </div>
+                                      </td>
+                                      <td className="px-4 py-3 text-center">
+                                        {tracker.tracker_file ? (
+                                          <a
+                                            href={tracker.tracker_file}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600 transition-colors"
+                                            title="Download File"
+                                          >
+                                            <Download className="w-4 h-4" />
+                                          </a>
+                                        ) : (
+                                          <span className="text-slate-400 text-xs">—</span>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-3 text-center">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleQCForm(tracker);
+                                          }}
+                                          disabled={qcFormLoading === tracker.tracker_id}
+                                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-slate-400 text-white text-xs font-semibold transition-colors"
+                                        >
+                                          {qcFormLoading === tracker.tracker_id ? (
+                                            <>
+                                              <Loader2 className="w-3 h-3 animate-spin" />
+                                              Loading
+                                            </>
+                                          ) : (
+                                            <>
+                                              <FileCheck className="w-3 h-3" />
+                                              QC Form
+                                            </>
+                                          )}
+                                        </button>
+                                      </td>
                                     </tr>
                                   );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
+                                })}
+                              </tbody>
+                            </table>
                           </div>
                         ) : (
-                          <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-16 h-full flex items-center justify-center">
-                            <div className="text-center max-w-md">
-                              <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                <FileText className="w-10 h-10 text-slate-400" />
-                              </div>
-                              <h3 className="text-lg font-bold text-slate-700 mb-2">No Files Found</h3>
-                              <p className="text-slate-500 text-sm">
-                                No tracker files available for this agent in the selected date range. Try adjusting the date filter.
-                              </p>
-                            </div>
+                          <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center">
+                            <FileText className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                            <h3 className="text-lg font-bold text-slate-700">No Files Found</h3>
+                            <p className="text-sm text-slate-500">No tracker files available for this agent in the selected date range.</p>
                           </div>
                         )}
                       </div>
@@ -1172,7 +1241,264 @@ const QAAgentList = () => {
 
         {/* QC Form Report Tab */}
         {activeTab === 'qc_report' && (
-          <QCFormReportView />
+          <QAAgentQCFormReport />
+        )}
+
+        {/* Rework & Correction Review Tab */}
+        {activeTab === 'rework_review' && (
+          <>
+        <div className="bg-white rounded-2xl shadow-xl border-2 border-slate-200 overflow-hidden" style={{ height: 'calc(100vh - 400px)', minHeight: '600px' }}>
+          {loading ? (
+            <div className="h-full flex flex-col items-center justify-center p-16">
+              <div className="relative">
+                <div className="w-20 h-20 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <UsersIcon className="w-8 h-8 text-blue-600 animate-pulse" />
+                </div>
+              </div>
+              <p className="text-slate-700 font-bold text-lg mt-6">Loading Agent Data</p>
+              <p className="text-slate-500 text-sm mt-2">Please wait while we fetch the information...</p>
+            </div>
+          ) : filteredAndSortedAgents.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center p-16">
+              <div className="w-24 h-24 bg-gradient-to-br from-slate-100 to-slate-200 rounded-3xl flex items-center justify-center mb-6 shadow-inner">
+                <UsersIcon className="w-12 h-12 text-slate-400" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 mb-3">
+                {searchQuery ? 'No Agents Found' : 'No Agent Data Available'}
+              </h3>
+              <p className="text-slate-600 text-sm max-w-md mb-6 text-center">
+                {searchQuery 
+                  ? `We couldn't find any agents matching "${searchQuery}". Try adjusting your search.`
+                  : 'No agents are currently assigned to you. Please check back later or contact your administrator.'
+                }
+              </p>
+              {searchQuery && (
+                <button
+                  onClick={handleClearSearch}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-xl transition-all duration-300"
+                >
+                  <X className="w-4 h-4" />
+                  Clear Search
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex h-full">
+              {/* Left Sidebar - Agent List */}
+              <div className="w-80 border-r-2 border-slate-200 bg-gradient-to-b from-slate-50 to-white flex flex-col">
+                {/* Sidebar Header */}
+                <div className="px-5 py-4 border-b-2 border-slate-200 bg-gradient-to-r from-blue-600 to-indigo-600">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                      <UsersIcon className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-bold text-base">Agents</h3>
+                      <p className="text-blue-100 text-xs font-medium">{filteredAndSortedAgents.length} Total</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Search Section */}
+                <div className="p-3 border-b-2 border-slate-200 bg-white">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-600 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search agents..."
+                      className="w-full pl-10 pr-9 py-2.5 text-sm font-medium border-2 border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 hover:bg-white transition-all placeholder:text-slate-400"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={handleClearSearch}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 bg-slate-200 hover:bg-red-100 text-slate-600 hover:text-red-600 rounded-md transition-all flex items-center justify-center group"
+                      >
+                        <X className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-300" />
+                      </button>
+                    )}
+                  </div>
+                  {searchQuery && (
+                    <div className="mt-2 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-3 py-1.5 rounded-lg shadow-sm">
+                      <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div>
+                      <span className="font-bold text-xs">
+                        {filteredAndSortedAgents.length} result{filteredAndSortedAgents.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Agents List */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                  {filteredAndSortedAgents.map((agent) => {
+                    const trackers = agentTrackers[agent.user_id] || [];
+                    const isSelected = selectedAgentId === agent.user_id;
+                    
+                    return (
+                      <button
+                        key={agent.user_id}
+                        onClick={() => {
+                          setSelectedAgentId(agent.user_id);
+                          // Initialize date filter to today if not set
+                          if (!agentDateFilters[agent.user_id]) {
+                            const today = getTodayDate();
+                            setAgentDateFilters(prev => ({
+                              ...prev,
+                              [agent.user_id]: { startDate: today, endDate: today }
+                            }));
+                          }
+                          // Fetch pending QC files for rework/correction
+                          const filters = agentDateFilters[agent.user_id] || { startDate: getTodayDate(), endDate: getTodayDate() };
+                          fetchReworkTrackers(agent.user_id, filters.startDate, filters.endDate);
+                        }}
+                        disabled={agentLoading}
+                        className={`w-full text-left p-4 rounded-xl transition-all duration-300 border-2 relative overflow-hidden ${
+                          isSelected
+                            ? 'bg-white border-blue-600 shadow-lg scale-105'
+                            : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-md'
+                        } ${agentLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                      >
+                        {/* Left accent border for selected */}
+                        {isSelected && (
+                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-600 to-indigo-600"></div>
+                        )}
+                        
+                        <div className="flex items-center gap-3">
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all shadow-sm bg-gradient-to-br from-blue-100 to-indigo-100`}>
+                            <UsersIcon className="w-6 h-6 text-blue-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-bold text-sm truncate text-slate-900">
+                                {agent.user_name}
+                              </h4>
+                              {isSelected && (
+                                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm">
+                                  <Check className="w-3 h-3" />
+                                  <span className="text-xs font-bold">Selected</span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-100 text-blue-700">
+                              <FileText className="w-3 h-3" />
+                              <span>{trackers.length} file{trackers.length !== 1 ? 's' : ''}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Right Panel - Agent Details */}
+              <div className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 to-blue-50/30">
+                {agentLoading ? (
+                  <div className="h-full flex items-center justify-center">
+                    <div className="text-center">
+                      <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+                      <p className="text-slate-700 font-bold text-lg">Loading Pending QC Files...</p>
+                      <p className="text-slate-500 text-sm mt-2">Please wait</p>
+                    </div>
+                  </div>
+                ) : selectedAgentId ? (() => {
+                  const selectedAgent = agents.find(a => a.user_id === selectedAgentId);
+                  const trackers = agentTrackers[selectedAgentId] || [];
+                  
+                  return (
+                    <>
+                      {/* Header */}
+                      <div className="px-6 py-5 border-b-2 border-slate-200 bg-white">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
+                              <UsersIcon className="w-7 h-7 text-white" />
+                            </div>
+                            <div>
+                              <h2 className="text-xl font-bold text-slate-900">{selectedAgent?.user_name}</h2>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700">
+                                  {trackers.length} pending file{trackers.length !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Date Filter */}
+                      <div className="px-6 py-3 bg-white border-b border-slate-200">
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs font-semibold text-slate-600">From:</label>
+                            <input
+                              type="date"
+                              value={agentDateFilters[selectedAgentId]?.startDate || getTodayDate()}
+                              onChange={(e) => handleAgentStartDateChange(selectedAgentId, e.target.value)}
+                              className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:border-blue-500 outline-none"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs font-semibold text-slate-600">To:</label>
+                            <input
+                              type="date"
+                              value={agentDateFilters[selectedAgentId]?.endDate || getTodayDate()}
+                              onChange={(e) => handleAgentEndDateChange(selectedAgentId, e.target.value)}
+                              className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:border-blue-500 outline-none"
+                            />
+                          </div>
+                          <button
+                            onClick={() => handleResetAgentFilters(selectedAgentId)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium transition-colors"
+                            type="button"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            Today
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Pending Files Table */}
+                      <div className="flex-1 overflow-y-auto p-6">
+                        {trackers.length > 0 ? (
+                          <PendingQCFilesTable 
+                            trackers={trackers}
+                            handleQCForm={handleQCForm}
+                            qcFormLoading={qcFormLoading}
+                          />
+                        ) : (
+                          <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center">
+                            <FileText className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                            <h3 className="text-lg font-bold text-slate-700">No Pending Files</h3>
+                            <p className="text-sm text-slate-500">No pending rework or correction files for this agent.</p>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  );
+                })() : (
+                  <div className="h-full flex items-center justify-center p-16">
+                    <div className="text-center">
+                      <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                        <UsersIcon className="w-12 h-12 text-blue-600" />
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-800 mb-2">Select an Agent</h3>
+                      <p className="text-slate-600 text-sm">Choose an agent from the sidebar to view their pending files</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        </>
+        )}
+
+        {/* QC Dashboard Tab */}
+        {activeTab === 'qc_dashboard' && (
+          <QAAgentQCDashboard />
         )}
 
         {/* Loader spinner style */}

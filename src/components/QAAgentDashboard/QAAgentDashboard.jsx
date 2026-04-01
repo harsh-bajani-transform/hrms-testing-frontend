@@ -21,6 +21,8 @@ import QATabsNavigation from "./QATabsNavigation";
 import BillableReport from "../common/BillableReport";
 import QAFilterBar from "./QAFilterBar";
 import QAIndividualAuditReport from "./QAIndividualAuditReport";
+import QAAgentQCFormReport from "../dashboard/QAAgentQCFormReport";
+import QAAgentReworkCorrectionReview from "../dashboard/QAAgentReworkCorrectionReview";
 
 const QAAgentDashboard = ({ embedded = false }) => {
   // StatCard component for dashboard stats
@@ -467,15 +469,6 @@ const QAAgentDashboard = ({ embedded = false }) => {
                             )}
                           </div>
                         </div>
-
-                        {/* QC Form Button */}
-                        <button
-                          onClick={() => handleQCForm(file)}
-                          className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2 shrink-0 group/btn"
-                        >
-                          <FileCheck className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
-                          QC Form
-                        </button>
                       </div>
                     </div>
                   ))}
@@ -489,6 +482,10 @@ const QAAgentDashboard = ({ embedded = false }) => {
       {activeTab === 'billable_report' && <BillableReport />}
       
       {activeTab === 'audit_report' && <QAIndividualAuditReport />}
+      
+      {activeTab === 'qc_form_report' && <QAAgentQCFormReport />}
+      
+      {activeTab === 'rework_correction_report' && <QAAgentReworkCorrectionReview />}
     </div>
   );
 

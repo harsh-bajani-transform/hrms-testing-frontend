@@ -9,7 +9,7 @@ import { DateRangePicker } from "../common/CustomCalendar";
 import SearchableSelect from "../common/SearchableSelect";
 import { useAuth } from "../../context/AuthContext";
 import { getQCRecordsList } from "../../services/qcService";
-import * as XLSX from 'xlsx';
+import { exportToCSV } from '../../utils/csvExport';
 import { toast } from 'react-hot-toast';
 
 const QCFormReportView = () => {
@@ -134,7 +134,7 @@ const QCFormReportView = () => {
     setEndDate(getTodayDate());
   };
 
-  // Export to Excel function
+  // Export to CSV function
   const handleExportToExcel = () => {
     try {
       if (filteredReports.length === 0) {
@@ -176,15 +176,14 @@ const QCFormReportView = () => {
           errorList = [];
         }
         
-        // Format error list as multi-line string for single cell
+        // Format error list as comma-separated string
         const errorListString = errorList.length > 0 
           ? errorList.map((error, idx) => {
-              // Extract error text properly from object or string
               const errorLabel = typeof error === 'object' 
                 ? (error.error || error.name || error.message || error.error_name || JSON.stringify(error)) 
                 : String(error);
               return `${idx + 1}. ${errorLabel}`;
-            }).join('\n')
+            }).join('; ')
           : 'No errors';
         
         return {
@@ -204,48 +203,14 @@ const QCFormReportView = () => {
         };
       });
 
-      // Create workbook
-      const workbook = XLSX.utils.book_new();
-      
-      // Create worksheet with summary first, then data
-      const worksheet = XLSX.utils.json_to_sheet(summaryData);
-      
-      // Append the main data table below the summary
-      XLSX.utils.sheet_add_json(worksheet, exportData, { origin: -1, skipHeader: false });
-
-      // Set column widths
-      worksheet['!cols'] = [
-        { wch: 20 }, // Evaluation Date & Time / Summary
-        { wch: 20 }, // Work Date / Value
-        { wch: 20 }, // Assistant Manager
-        { wch: 20 }, // QA Agent
-        { wch: 20 }, // Agent
-        { wch: 25 }, // Project
-        { wch: 30 }, // Task
-        { wch: 12 }, // Total Record
-        { wch: 12 }, // QC Record
-        { wch: 12 }, // Errors Count
-        { wch: 50 }, // Error List
-        { wch: 12 }, // Status
-        { wch: 10 }  // QC Score
-      ];
-
-      // Enable text wrapping for Error List column
-      const range = XLSX.utils.decode_range(worksheet['!ref']);
-      for (let row = range.s.r + 1; row <= range.e.r; row++) {
-        const cellAddress = XLSX.utils.encode_cell({ r: row, c: 10 }); // Column K (Error List)
-        if (worksheet[cellAddress]) {
-          worksheet[cellAddress].s = { alignment: { wrapText: true, vertical: 'top' } };
-        }
-      }
-
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'QC Form Report');
+      // Combine summary and data for export
+      const combinedData = [...summaryData, ...exportData];
 
       // Generate filename with date range
-      const filename = `QC_Form_Report_${startDate}_to_${endDate}.xlsx`;
+      const filename = `QC_Form_Report_${startDate}_to_${endDate}.csv`;
 
-      // Download file
-      XLSX.writeFile(workbook, filename);
+      // Export to CSV
+      exportToCSV(combinedData, filename);
 
       toast.success(`Exported ${filteredReports.length} records successfully!`);
     } catch (error) {

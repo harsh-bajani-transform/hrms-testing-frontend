@@ -48,6 +48,22 @@ const QCFormPage = () => {
   const location = useLocation();
   const trackerData = location.state?.tracker;
   const { user } = useAuth();
+  
+  // Debug: Log trackerData on component mount to see what we receive
+  useEffect(() => {
+    console.log('[QCFormPage] Component mounted with trackerData:', trackerData);
+    console.log('[QCFormPage] TrackerData fields:', {
+      agent_id: trackerData?.agent_id,
+      user_id: trackerData?.user_id,
+      agent_user_id: trackerData?.agent_user_id,
+      project_id: trackerData?.project_id,
+      task_id: trackerData?.task_id,
+      agent_name: trackerData?.agent_name,
+      project_name: trackerData?.project_name,
+      task_name: trackerData?.task_name,
+      all_keys: trackerData ? Object.keys(trackerData) : []
+    });
+  }, []);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -846,7 +862,7 @@ const QCFormPage = () => {
             <div>
               <p className="text-sm text-slate-600 font-medium">Agent Name</p>
               <p className="text-lg font-bold text-slate-800">
-                {trackerData.user_name || 'N/A'}
+                {trackerData.agent_name || trackerData.user_name || 'N/A'}
               </p>
             </div>
           </div>
@@ -889,7 +905,25 @@ const QCFormPage = () => {
             <div>
               <p className="text-sm text-slate-600 font-medium">Submission Date & Time</p>
               <p className="text-lg font-bold text-slate-800">
-                {trackerData.date_time 
+                {trackerData.date_of_file_submission
+                  ? new Date(trackerData.date_of_file_submission).toLocaleString('en-GB', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true
+                    })
+                  : trackerData.updated_at
+                  ? new Date(trackerData.updated_at).toLocaleString('en-GB', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true
+                    })
+                  : trackerData.date_time 
                   ? trackerData.date_time.replace(/:\d{2}\s*GMT.*$/, '').trim()
                   : trackerData.tracker_date 
                   ? trackerData.tracker_date.replace(/:\d{2}\s*GMT.*$/, '').trim()
@@ -929,10 +963,11 @@ const QCFormPage = () => {
       </div>
 
       {/* QC Form Table */}
-      <div className="bg-white rounded-xl shadow-lg border-2 border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 sticky top-0">
+      <div className="bg-white rounded-xl shadow-lg border-2 border-slate-200">
+        <div className="overflow-x-auto" style={{overflowY: 'visible'}}>
+          <div className="min-w-max">
+        <table className="w-full">
+            <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 sticky top-0 z-[100]">
               <tr>
                 <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-blue-500">
                   Sr. No.
@@ -988,8 +1023,8 @@ const QCFormPage = () => {
                     ))}
 
                     {/* Error Selection Dropdown */}
-                    <td className="px-4 py-4 border-r border-slate-200">
-                      <div className="flex flex-col gap-3">
+                    <td className="px-4 py-4 border-r border-slate-200 relative">
+                      <div className="flex flex-col gap-3">        
                         <SearchableSelect
                           value={pendingSelections[row.id]?.category || ''}
                           onChange={(value) => {
@@ -1114,6 +1149,7 @@ const QCFormPage = () => {
               })}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* Enhanced Pagination Controls */}

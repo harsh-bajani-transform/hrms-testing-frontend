@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import * as XLSX from 'xlsx';
+import { exportToCSV } from '../../utils/csvExport';
 import { toast } from "react-hot-toast";
 import React, { useState, useEffect } from "react";
 import { fetchDropdown } from "../../services/dropdownService";
@@ -143,21 +143,8 @@ const BillableReport = ({ userId }) => {
         exportData.push(totalRow);
       }
 
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-      const colWidths = [
-        { wch: 20 }, // User Name
-        { wch: 16 }, // Date
-        { wch: 16 }, // Assign Hours
-        { wch: 18 }, // Worked Hours
-        { wch: 12 }, // QC Score
-        { wch: 15 }, // Tracker Count
-        { wch: 22 }  // Daily Required Hours
-      ];
-      
-      worksheet['!cols'] = colWidths;
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Daily_Report');
-      XLSX.writeFile(workbook, 'All_Users_Daily_Report.xlsx');
+      const filename = 'All_Users_Daily_Report.csv';
+      exportToCSV(exportData, filename);
       toast.success('Exported all users daily report!');
     } catch {
       toast.error('Failed to export all users');
@@ -215,26 +202,8 @@ const BillableReport = ({ userId }) => {
         
         exportData.push(totalRow);
       }
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-      const colWidths = [
-        { wch: 20 }, // User Name
-      ];
-      
-      if (!isAssistantManager) {
-        colWidths.push({ wch: 16 }); // Team
-      }
-      
-      colWidths.push(
-        { wch: 26 }, // Billable Hour Delivered
-        { wch: 16 }, // Monthly Goal
-        { wch: 18 }, // Pending Target
-        { wch: 16 }  // Avg. QC Score
-      );
-      
-      worksheet['!cols'] = colWidths;
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, `${monthObj.label}_${monthObj.year}`);
-      XLSX.writeFile(workbook, `Monthly_Table_${monthObj.label}_${monthObj.year}.xlsx`);
+      const filename = `Monthly_Table_${monthObj.label}_${monthObj.year}.csv`;
+      exportToCSV(exportData, filename);
       toast.success('Table exported!');
     } catch {
       toast.error('Failed to export table');
@@ -539,19 +508,8 @@ const BillableReport = ({ userId }) => {
           'Daily Required Hours': totalRequired.toFixed(2)
         });
       }
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-      worksheet['!cols'] = [
-        { wch: 24 }, // Date-Time
-        { wch: 16 }, // Assigned Hour
-        { wch: 16 }, // Worked Hours
-        { wch: 12 }, // QC Score
-        { wch: 15 }, // Tracker Count
-        { wch: 20 }, // Daily Required Hours
-      ];
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, `${user.user_name || month_year}`);
-      const filename = `Daily_Report_${user.user_name || 'User'}_${month_year}.xlsx`;
-      XLSX.writeFile(workbook, filename);
+      const filename = `Daily_Report_${user.user_name || 'User'}_${month_year}.csv`;
+      exportToCSV(exportData, filename);
       toast.success(`Exported daily data for ${user.user_name || 'User'} (${month_year})!`);
     } catch {
       toast.error('Failed to export daily data for this user/month');

@@ -9,7 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
 import nodeApi from '../../services/nodeApi';
 import api from '../../services/api';
-import * as XLSX from 'xlsx';
+import { exportToCSV } from '../../utils/csvExport';
 import { 
   Download, 
   FileSpreadsheet, 
@@ -302,7 +302,7 @@ const AgentQCReport = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // Export to Excel
+  // Export to CSV
   const handleExportExcel = () => {
     try {
       if (qcData.length === 0) {
@@ -335,22 +335,8 @@ const AgentQCReport = () => {
         'QC Score': `${avgScore.toFixed(2)}%`
       });
 
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-      worksheet['!cols'] = [
-        { wch: 20 },  // Evaluation Date & Time
-        { wch: 15 },  // QA Agent
-        { wch: 30 },  // Project/Task
-        { wch: 10 },  // File (Yes/No)
-        { wch: 14 },  // Total Records
-        { wch: 35 },  // Error List
-        { wch: 12 },  // Status
-        { wch: 12 }   // QC Score
-      ];
-
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'QC Report');
-      const filename = `QC_Report_${startDate}_to_${endDate}.xlsx`;
-      XLSX.writeFile(workbook, filename);
+      const filename = `QC_Report_${startDate}_to_${endDate}.csv`;
+      exportToCSV(exportData, filename);
       toast.success('QC report exported!');
     } catch (err) {
       const msg = getFriendlyErrorMessage(err);

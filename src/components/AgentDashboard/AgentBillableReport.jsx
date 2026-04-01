@@ -1,5 +1,5 @@
 // ...existing imports...
-import * as XLSX from 'xlsx';
+import { exportToCSV } from '../../utils/csvExport';
 import { toast } from "react-hot-toast";
 import React, { useState, useEffect, useRef } from "react";
 import { getFriendlyErrorMessage } from '../../utils/errorMessages';
@@ -14,7 +14,7 @@ import { Download, Calendar as CalendarIcon, FileSpreadsheet, X, RotateCcw, Chev
 import { DateRangePicker } from '../common/CustomCalendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import AgentQCReport from './AgentQCReport';
+import AgentQCReportPage from '../../pages/AgentQCReportPage';
 
 
 
@@ -170,25 +170,15 @@ const BillableReport = () => {
           'Avg. QC Score': avgQC,
         });
 
-        const worksheet = XLSX.utils.json_to_sheet(exportData);
-        worksheet['!cols'] = [
-          { wch: 16 },
-          { wch: 26 },
-          { wch: 16 },
-          { wch: 16 },
-          { wch: 16 },
-        ];
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Monthly Report');
-        const filename = `Monthly_Report.xlsx`;
-        XLSX.writeFile(workbook, filename);
+        const filename = 'Monthly_Report.csv';
+        exportToCSV(exportData, filename);
         toast.success('Monthly report exported!');
       } catch (err) {
         const msg = getFriendlyErrorMessage(err);
         toast.error(msg);
       }
     };
-  // Export to Excel for a single monthly summary row
+  // Export to CSV for a single monthly summary row
   const handleExportMonthlyExcelRow = (row) => {
     try {
       const exportData = [{
@@ -198,18 +188,8 @@ const BillableReport = () => {
         'Pending Target': row.pending,
         'Avg. QC Score': row.qc != null && row.qc !== '-' ? `${row.qc}%` : '-',
       }];
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-      worksheet['!cols'] = [
-        { wch: 16 },
-        { wch: 24 },
-        { wch: 16 },
-        { wch: 16 },
-        { wch: 16 },
-      ];
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, row.month);
-      const filename = `Monthly_Summary_${row.month}.xlsx`;
-      XLSX.writeFile(workbook, filename);
+      const filename = `Monthly_Summary_${row.month}.csv`;
+      exportToCSV(exportData, filename);
       toast.success(`Exported ${row.month} summary!`);
     } catch (err) {
       const msg = getFriendlyErrorMessage(err);
@@ -272,19 +252,8 @@ const BillableReport = () => {
         'Tracker Count': totalTrackers,
         'Daily Required Hours': totalRequired.toFixed(2),
       });
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-      worksheet['!cols'] = [
-        { wch: 20 },
-        { wch: 14 },
-        { wch: 14 },
-        { wch: 10 },
-        { wch: 15 },
-        { wch: 20 },
-      ];
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Month Daily Report');
-      const filename = `Month_Daily_Report_${monthYear}.xlsx`;
-      XLSX.writeFile(workbook, filename);
+      const filename = `Month_Daily_Report_${monthYear}.csv`;
+      exportToCSV(exportData, filename);
       toast.success('Month daily report exported!');
     } catch (err) {
       const msg = getFriendlyErrorMessage(err);
@@ -489,18 +458,8 @@ const BillableReport = () => {
         'Daily Required Hours': totalRequired.toFixed(2),
       });
 
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-      worksheet['!cols'] = [
-        { wch: 16 },  // Date
-        { wch: 16 },  // Assign Hours
-        { wch: 16 },  // Worked Hours
-        { wch: 12 },  // QC Score
-        { wch: 15 },  // Tracker Count
-        { wch: 22 },  // Daily Required Hours
-      ];
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Daily Report');
-      XLSX.writeFile(workbook, 'Daily_Report.xlsx');
+      const filename = 'Daily_Report.csv';
+      exportToCSV(exportData, filename);
       toast.success('Daily report exported!');
     } catch {
       toast.error('Failed to export daily report');
@@ -609,7 +568,7 @@ const BillableReport = () => {
                   <button
                     onClick={handleExportDailyExcel}
                     className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
-                    title="Export filtered data to Excel"
+                    title="Export filtered data to CSV"
                   >
                     <Download className="w-4 h-4" />
                     Export
@@ -833,7 +792,7 @@ const BillableReport = () => {
 
       {/* QC Report view */}
       {activeToggle === 'qc' && (
-        <AgentQCReport />
+        <AgentQCReportPage />
       )}
     </div>
   );

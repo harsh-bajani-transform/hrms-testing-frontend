@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { useCurrentUserRole } from "../../hooks/useCurrentUserRole";
 import { useAuth } from "../../context/AuthContext";
-import * as XLSX from "xlsx";
+import { exportToCSV } from '../../utils/csvExport';
 import { toast } from "react-hot-toast";
 import { User, Download, ChevronUp, Calendar, X, RotateCcw, Edit, Plus } from "lucide-react";
 import DailyEntryFormModal from "./DailyEntryFormModal";
@@ -401,19 +401,8 @@ export default function UserCard({
                           'Daily Required Hours': totalRequired.toFixed(2)
                         });
                       }
-                      const worksheet = XLSX.utils.json_to_sheet(exportData);
-                      worksheet['!cols'] = [
-                        { wch: 16 }, // Date
-                        { wch: 16 }, // Assign Hours
-                        { wch: 16 }, // Worked Hours
-                        { wch: 12 }, // QC Score
-                        { wch: 15 }, // Tracker Count
-                        { wch: 22 }  // Daily Required Hours
-                      ];
-                      const workbook = XLSX.utils.book_new();
-                      XLSX.utils.book_append_sheet(workbook, worksheet, user.user_name || 'User');
-                      const filename = `Daily_Report_${user.user_name || 'User'}_${start || 'all'}_${end || 'all'}.xlsx`;
-                      XLSX.writeFile(workbook, filename);
+                      const filename = `Daily_Report_${user.user_name || 'User'}_${start || 'all'}_${end || 'all'}.csv`;
+                      exportToCSV(exportData, filename);
                       toast.success('Daily report exported successfully!');
                     } catch {
                       toast.error('Failed to export daily report');

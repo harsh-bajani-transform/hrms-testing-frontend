@@ -24,7 +24,8 @@ import {
   Users,
   Briefcase,
   Brain,
-  UserCheck
+  UserCheck,
+  BarChart3
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import GeminiKeyModal from "../GeminiKeyModal";
@@ -136,6 +137,13 @@ const Header = ({
       setIsMobileMenuOpen(false);
       return;
     }
+    if (view === 'QC_REPORT_OVERVIEW') {
+      console.log('🚀 [Header goTo] Navigating to QC Report Overview');
+      // For Admin, Super Admin, PM, and Assistant Manager
+      navigate('/dashboard?tab=qc_report_overview');
+      setIsMobileMenuOpen(false);
+      return;
+    }
     if (view === 'QA_AGENT_AUDIT') {
       console.log('🚀 [Header goTo] Navigating to QA Agent Audit');
       // For Admin, Super Admin, PM, and Assistant Manager
@@ -206,6 +214,7 @@ const Header = ({
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
         { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+        { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 },
         { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
       ];
@@ -235,7 +244,7 @@ const Header = ({
           return [
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
             { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
-            { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+            { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 },
             { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
             { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
           ];
@@ -244,7 +253,7 @@ const Header = ({
           return [
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
             { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
-            { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+            { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 },
             { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
             { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
           ];
@@ -268,7 +277,7 @@ const Header = ({
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
-        { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+        { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 },
         { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
       ];
@@ -278,7 +287,7 @@ const Header = ({
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
-        { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+        { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 },
         { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
       ];
@@ -312,6 +321,11 @@ const Header = ({
     // Check for Agent List/Agent's Files & QC Report
     if (view === 'AGENT_LIST') {
       return currentPath === '/dashboard' && currentTab === 'agent_file_report';
+    }
+
+    // Check for QC Report Overview
+    if (view === 'QC_REPORT_OVERVIEW') {
+      return currentPath === '/dashboard' && currentTab === 'qc_report_overview';
     }
 
     // Check for QA Agent Audit

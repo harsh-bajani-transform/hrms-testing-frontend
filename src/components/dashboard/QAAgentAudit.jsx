@@ -9,7 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
 import nodeApi from '../../services/nodeApi';
 import api from '../../services/api';
-import * as XLSX from 'xlsx';
+import { exportToCSV } from '../../utils/csvExport';
 import { 
   Download, 
   FileSpreadsheet, 
@@ -755,28 +755,12 @@ const QAAgentAudit = () => {
         });
       }
 
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-      worksheet['!cols'] = [
-        { wch: 20 },  // Audit Date & Time
-        { wch: 15 },  // QA Agent
-        { wch: 15 },  // Agent Name
-        { wch: 20 },  // Project
-        { wch: 18 },  // Task
-        { wch: 25 },  // File
-        { wch: 12 },  // Total QCs
-        { wch: 14 },  // QC Score
-        { wch: 12 }   // Status
-      ];
-
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'QA Agent Audit');
-      
       // Generate filename with current timestamp
       const now = new Date();
       const timestamp = now.toISOString().split('T')[0]; // YYYY-MM-DD format
-      const filename = `QA_Agent_Audit_All_Users_${timestamp}.xlsx`;
+      const filename = `QA_Agent_Audit_All_Users_${timestamp}.csv`;
       
-      XLSX.writeFile(workbook, filename);
+      exportToCSV(exportData, filename);
       toast.success(`Exported ${dataToExport.length} records for all users!`);
     } catch (err) {
       const msg = getFriendlyErrorMessage(err);

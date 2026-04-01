@@ -416,29 +416,8 @@ const ProjectMonthlyReport = () => {
       };
       exportData.push(totals);
 
-      // Create worksheet
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-
-      // Set column widths
-      worksheet['!cols'] = [
-        { wch: 30 }, // Project Name
-        { wch: 15 }, // Month/Year
-        { wch: 15 }, // Monthly Target
-        { wch: 22 }, // Achieved Monthly Target
-        { wch: 22 }, // Pending Monthly Target
-        { wch: 22 }, // Tenure Achieved Hours
-        { wch: 22 }  // Tenure Pending Hours
-      ];
-
-      // Create workbook
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Project Monthly Report');
-
-      // Generate filename
-      const filename = `Project_Monthly_Report_${monthYear}.xlsx`;
-
-      // Download file
-      XLSX.writeFile(workbook, filename);
+      const filename = `Project_Monthly_Report_${monthYear}.csv`;
+      exportToCSV(exportData, filename);
 
       toast.success(`Exported ${monthData.length} projects successfully!`);
     } catch (err) {
@@ -584,12 +563,12 @@ const ProjectMonthlyReport = () => {
                           </button>
                         )}
                       </div>
-                      {/* Export to Excel Button */}
+                      {/* Export to CSV Button */}
                       <button
                         onClick={() => handleExportToExcel(monthYear)}
                         disabled={loading || filteredMonthData.length === 0}
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
-                        title="Export this month's data to Excel"
+                        title="Export this month's data to CSV"
                       >
                         <Download className="w-4 h-4" />
                         Export

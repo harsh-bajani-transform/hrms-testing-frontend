@@ -5,7 +5,7 @@ import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
-import * as XLSX from 'xlsx';
+import { exportToCSV } from '../../utils/csvExport';
 import { MonthYearPicker } from '../common/CustomCalendar';
 import SearchableSelect from '../common/SearchableSelect';
 import DeleteConfirmationModal from '../common/DeleteConfirmationModal';
@@ -533,7 +533,7 @@ const UserMonthlyReport = () => {
     }));
   };
 
-  // Export to Excel function for a specific month
+  // Export to CSV function for a specific month
   const handleExportToExcel = (monthYear) => {
     if (reportData.length === 0) {
       toast.error('No data to export');
@@ -588,33 +588,11 @@ const UserMonthlyReport = () => {
       // Add totals row to export data
       exportData.push(totals);
 
-      // Create worksheet
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-
-      // Set column widths
-      const columnWidths = [
-        { wch: 20 }, // User Name
-      ];
-      if (canViewTeamColumn) {
-        columnWidths.push({ wch: 18 }); // Team
-      }
-      columnWidths.push(
-        { wch: 15 }, // Month/Year
-        { wch: 15 }, // Monthly Target
-        { wch: 18 }, // Extra Assign Hours
-        { wch: 15 }  // Working Days
-      );
-      worksheet['!cols'] = columnWidths;
-
-      // Create workbook
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'User Monthly Report');
-
       // Generate filename
-      const filename = `User_Monthly_Report_${monthYear}.xlsx`;
+      const filename = `User_Monthly_Report_${monthYear}.csv`;
 
-      // Download file
-      XLSX.writeFile(workbook, filename);
+      // Export to CSV
+      exportToCSV(exportData, filename);
 
       toast.success(`Exported ${submittedRecords.length} records successfully!`);
     } catch (err) {

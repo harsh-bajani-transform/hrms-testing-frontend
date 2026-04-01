@@ -7,7 +7,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { format } from "date-fns";
 import { Download, Filter, FileDown, Users as UsersIcon, Calendar, RotateCcw, RefreshCw, Edit, Trash2, X, ChevronDown, Briefcase, ListTodo, Info, Plus, ListChecks, Clock, TrendingUp, Target } from "lucide-react";
 import { toast } from "react-hot-toast";
-import * as XLSX from 'xlsx';
+import { exportToCSV } from '../../utils/csvExport';
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { log, logError } from "../../config/environment";
@@ -1197,7 +1197,7 @@ const QATrackerReport = () => {
     });
   }, [trackers]);
 
-  // Export to Excel function
+  // Export to CSV function
   const handleExportToExcel = () => {
     if (trackers.length === 0) {
       toast.error("No data to export");
@@ -1207,19 +1207,15 @@ const QATrackerReport = () => {
     try {
       // Prepare data for export
       const exportData = trackers.map((tracker) => {
-        // Split agent, project and task names by spaces and join with newlines
         const agentName = tracker.user_name || "-";
         const projectName = tracker.project_name || "-";
         const taskName = tracker.task_name || "-";
-        const agentFormatted = agentName !== "-" ? agentName.split(' ').join('\n') : "-";
-        const projectFormatted = projectName !== "-" ? projectName.split(' ').join('\n') : "-";
-        const taskFormatted = taskName !== "-" ? taskName.split(' ').join('\n') : "-";
         
         return {
           'Date/Time': tracker.date_time ? tracker.date_time : "-",
-          'Agent': agentFormatted,
-          'Project': projectFormatted,
-          'Task': taskFormatted,
+          'Agent': agentName,
+          'Project': projectName,
+          'Task': taskName,
           'Shift': tracker.shift_type === 'day' ? 'Day' : tracker.shift_type === 'night' ? 'Night' : '-',
           'Per Hour Target': tracker.tenure_target || 0,
           'Production': tracker.production || 0,
@@ -1245,46 +1241,13 @@ const QATrackerReport = () => {
         'Has File': ''
       });
 
-      // Create workbook and worksheet
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-      
-      // Set text wrapping for Agent, Project and Task columns (columns B, C and D)
-      const range = XLSX.utils.decode_range(worksheet['!ref']);
-      for (let R = range.s.r; R <= range.e.r; ++R) {
-        // Column B (Agent), Column C (Project) and Column D (Task) - indices 1, 2 and 3
-        ['B', 'C', 'D'].forEach(col => {
-          const cellAddress = col + (R + 1);
-          if (worksheet[cellAddress]) {
-            if (!worksheet[cellAddress].s) worksheet[cellAddress].s = {};
-            worksheet[cellAddress].s.alignment = { wrapText: true, vertical: 'top' };
-          }
-        });
-      }
-      
-      // Set column widths
-      worksheet['!cols'] = [
-        { wch: 18 }, // Date/Time
-        { wch: 15 }, // Agent
-        { wch: 20 }, // Project
-        { wch: 25 }, // Task
-        { wch: 8 },  // Shift
-        { wch: 15 }, // Per Hour Target
-        { wch: 12 }, // Production
-        { wch: 15 }, // Billable Hours
-        { wch: 30 }, // Notes
-        { wch: 10 }  // Has File
-      ];
-      
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Tracker Report");
-
       // Generate filename with date range
-      const filename = `QA_Tracker_Report_${startDate}_to_${endDate}.xlsx`;
+      const filename = `QA_Tracker_Report_${startDate}_to_${endDate}.csv`;
 
-      // Download
-      XLSX.writeFile(workbook, filename);
+      // Export to CSV
+      exportToCSV(exportData, filename);
       toast.success("Report exported successfully!");
-      log('[QATrackerReport] Excel export completed:', filename);
+      log('[QATrackerReport] CSV export completed:', filename);
     } catch (error) {
       logError('[QATrackerReport] Excel export error:', error);
       toast.error("Failed to export data");

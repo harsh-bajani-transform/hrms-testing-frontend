@@ -12,6 +12,7 @@ import OverviewTab from '../components/dashboard/overview/OverviewTab';
 import QATrackerReport from '../components/dashboard/QATrackerReport';
 import QAAgentList from '../components/dashboard/QAAgentList';
 import QAAgentAudit from '../components/dashboard/QAAgentAudit';
+import ManagerQCReportsOverview from '../components/dashboard/ManagerQCReportsOverview';
 import QAAgentDashboard from '../components/QAAgentDashboard/QAAgentDashboard';
 import AssistantManagerDashboard from '../components/dashboard/AssistantManagerDashboard';
 import AdminDashboard from '../components/dashboard/AdminDashboard';
@@ -273,6 +274,9 @@ const DashboardPage = ({
     }
     // Other roles see both tabs with all data
     return <QAAgentAudit />;
+  }
+  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 4) && activeTab === 'qc_report_overview') {
+    return <ManagerQCReportsOverview />;
   }
 
   return (

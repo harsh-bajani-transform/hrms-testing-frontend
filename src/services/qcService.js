@@ -191,3 +191,163 @@ export const getQCRecordsList = async (logged_in_user_id = null) => {
     throw error;
   }
 };
+
+/**
+ * Get QC records for a specific agent
+ * @param {number} agent_id - Agent user ID
+ * @returns {Promise} Agent's QC records with history
+ */
+export const getAgentQCRecords = async (agent_id) => {
+  try {
+    log(`[QC Service] Fetching QC records for agent ${agent_id}`);
+    const response = await nodeApi.get(`/qc-records/agent/${agent_id}`);
+    log(`[QC Service] Agent QC records fetched successfully`);
+    return response.data;
+  } catch (error) {
+    logError("[QC Service] Error fetching agent QC records:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get QC records submitted by a specific QA agent
+ * @param {number} qa_user_id - QA user ID
+ * @returns {Promise} QA agent's submitted QC records
+ */
+export const getQAAgentQCRecords = async (qa_user_id) => {
+  try {
+    log(`[QC Service] Fetching QC records for QA agent ${qa_user_id}`);
+    const response = await nodeApi.get(`/qc-records/qa-agent/${qa_user_id}`);
+    log(`[QC Service] QA agent QC records fetched successfully`);
+    return response.data;
+  } catch (error) {
+    logError("[QC Service] Error fetching QA agent QC records:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get pending rework/correction reviews for QA agent
+ * @param {number} qa_user_id - QA user ID
+ * @returns {Promise} Pending reviews list
+ */
+export const getPendingReviews = async (qa_user_id) => {
+  try {
+    log(`[QC Service] Fetching pending reviews for QA agent ${qa_user_id}`);
+    const response = await nodeApi.get(`/qc-records/pending-review/${qa_user_id}`);
+    log(`[QC Service] Pending reviews fetched successfully`);
+    return response.data;
+  } catch (error) {
+    logError("[QC Service] Error fetching pending reviews:", error);
+    throw error;
+  }
+};
+
+/**
+ * Upload rework file
+ * @param {FormData} formData - Form data with file and metadata
+ * @returns {Promise} Upload response
+ */
+export const uploadReworkFile = async (formData) => {
+  try {
+    log(`[QC Service] Uploading rework file`);
+    const response = await nodeApi.post('/qc-records/upload-rework', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    log(`[QC Service] Rework file uploaded successfully`);
+    return response.data;
+  } catch (error) {
+    logError("[QC Service] Error uploading rework file:", error);
+    throw error;
+  }
+};
+
+/**
+ * Upload correction file
+ * @param {FormData} formData - Form data with file and metadata
+ * @returns {Promise} Upload response
+ */
+export const uploadCorrectionFile = async (formData) => {
+  try {
+    log(`[QC Service] Uploading correction file`);
+    const response = await nodeApi.post('/qc-records/upload-correction', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    log(`[QC Service] Correction file uploaded successfully`);
+    return response.data;
+  } catch (error) {
+    logError("[QC Service] Error uploading correction file:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get all QC records for managers/admins
+ * @param {Object} filters - Optional filters
+ * @returns {Promise} All QC records
+ */
+export const getAllQCRecords = async (filters = {}) => {
+  try {
+    log(`[QC Service] Fetching all QC records with filters:`, filters);
+    const response = await nodeApi.get('/qc-records/all', { params: filters });
+    log(`[QC Service] All QC records fetched successfully`);
+    return response.data;
+  } catch (error) {
+    logError("[QC Service] Error fetching all QC records:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get QC statistics
+ * @returns {Promise} QC statistics data
+ */
+export const getQCStatistics = async () => {
+  try {
+    log(`[QC Service] Fetching QC statistics`);
+    const response = await nodeApi.get('/qc-records/statistics');
+    log(`[QC Service] QC statistics fetched successfully`);
+    return response.data;
+  } catch (error) {
+    logError("[QC Service] Error fetching QC statistics:", error);
+    throw error;
+  }
+};
+
+/**
+ * Submit QC for rework file
+ * @param {Object} payload - QC form data for rework review
+ * @returns {Promise} Response data
+ */
+export const submitReworkQC = async (payload) => {
+  try {
+    log(`[QC Service] Submitting QC for rework file`);
+    const response = await nodeApi.post('/qc-records/review-rework', payload);
+    log(`[QC Service] Rework QC submitted successfully`);
+    return response.data;
+  } catch (error) {
+    logError("[QC Service] Error submitting rework QC:", error);
+    throw error;
+  }
+};
+
+/**
+ * Submit QC for correction file
+ * @param {Object} payload - QC form data for correction review
+ * @returns {Promise} Response data
+ */
+export const submitCorrectionQC = async (payload) => {
+  try {
+    log(`[QC Service] Submitting QC for correction file`);
+    const response = await nodeApi.post('/qc-records/review-correction', payload);
+    log(`[QC Service] Correction QC submitted successfully`);
+    return response.data;
+  } catch (error) {
+    logError("[QC Service] Error submitting correction QC:", error);
+    throw error;
+  }
+};
