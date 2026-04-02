@@ -652,23 +652,15 @@ const Tracker = ({ embedded = false }) => {
       const clientErrors = validate();
       setErrors(clientErrors);
       forceUpdate(n => n + 1);
-      
-      if (Object.keys(clientErrors).length > 0) {
-        return;
-      }
-      
+      if (Object.keys(clientErrors).length > 0) return;
       if (fileError) {
         toast.error("Please fix file upload errors before submitting", { duration: 4000 });
         return;
       }
-      
-      // Check if file is uploaded when validations are required
       if ((requiresAIValidation || requiresDuplicateCheck) && !file) {
         toast.error("Please upload a file to complete required validations", { duration: 4000 });
         return;
       }
-      
-      // Check if AI Evaluation is required and completed successfully
       if (requiresAIValidation && file) {
         if (!aiEvalComplete) {
           toast.error("Please complete AI Evaluation before submitting", { duration: 4000 });
@@ -679,8 +671,6 @@ const Tracker = ({ embedded = false }) => {
           return;
         }
       }
-      
-      // Check if Duplicate Check is required and completed successfully
       if (requiresDuplicateCheck && file) {
         if (!duplicateCheckComplete) {
           toast.error("Please complete Duplicate Check before submitting", { duration: 4000 });
@@ -691,95 +681,77 @@ const Tracker = ({ embedded = false }) => {
           return;
         }
       }
-      
       setSubmitting(true);
-      
       if (!selectedProject || !selectedTask || !productionTarget) {
         toast.error("Please fill in all required fields");
         setSubmitting(false);
         return;
       }
-      
-      const formData = new FormData();
-      formData.append('project_id', Number(selectedProject));
-      formData.append('task_id', Number(selectedTask));
-      formData.append('shift', shiftType);
-      console.log('[Tracker] Submitting shift value:', shiftType);
-      formData.append('user_id', user?.user_id);
-      formData.append('production', Number(productionTarget));
-      formData.append('tenure_target', Number(baseTarget));
-      
-      if (notes && notes.trim()) {
-        formData.append('tracker_note', notes.trim());
-      }
-      
+      // If file is uploaded, run process-excel first
       if (file) {
-        formData.append('tracker_file', file);
+        try {
+          log('[Tracker] Running process-excel for file processing');
+          const processFormData = new FormData();
+          processFormData.append('file', file);
+          processFormData.append('user_id', user?.user_id);
+          processFormData.append('project_id', Number(selectedProject));
+          processFormData.append('task_id', Number(selectedTask));
+          if (geminiApiKey) processFormData.append('gemini_api_key', geminiApiKey);
+          const processRes = await nodeApi.post('/tracker/process-excel', processFormData, {
+            headers: {
+              'Content-Type': 'multipart/form-data'
+            },
+            timeout: 300000 // 5 minutes for processing
+          });
+          log('[Tracker] Process-excel response:', processRes.data);
+          const isSuccess = 
+            processRes.status === 200 || 
+            processRes.status === 201 ||
+            processRes.data?.success === true || 
+            processRes.data?.success === 1 ||
+            processRes.data?.status === 'success' ||
+            processRes.data?.status === 200 ||
+            (typeof processRes.data?.message === 'string' && processRes.data?.message?.toLowerCase().includes('success'));
+          if (!isSuccess) {
+            logError('[Tracker] File processing failed:', processRes.data);
+            toast.error("You Have Either Duplicate File/Record. Please check your Excel file and try again.");
+            setSubmitting(false);
+            return;
+          }
+          toast.success("File processed successfully!");
+        } catch (processError) {
+          logError('[Tracker] Error in process-excel:', processError);
+          toast.error("You Have Either Duplicate File/Record. Please check your Excel file and try again.");
+          setSubmitting(false);
+          return;
+        }
       }
-      
+      // Now add the tracker
       try {
         log('[Tracker] Submitting tracker with FormData');
-        
-        // First, submit the tracker
+        const formData = new FormData();
+        formData.append('project_id', Number(selectedProject));
+        formData.append('task_id', Number(selectedTask));
+        formData.append('shift', shiftType);
+        formData.append('user_id', user?.user_id);
+        formData.append('production', Number(productionTarget));
+        formData.append('tenure_target', Number(baseTarget));
+        if (notes && notes.trim()) {
+          formData.append('tracker_note', notes.trim());
+        }
+        if (file) {
+          formData.append('tracker_file', file);
+        }
         const res = await api.post("/tracker/add", formData, {
           headers: {
             'Content-Type': 'multipart/form-data'
           }
         });
-        
         if (res.data?.status === 201 || res.status === 201 || res.status === 200) {
           log('[Tracker] Tracker added successfully');
-          
-          // If file is uploaded, run process-excel to create hashes
-          if (file) {
-            try {
-              log('[Tracker] Running process-excel for file processing');
-              const processFormData = new FormData();
-              processFormData.append('file', file);
-              processFormData.append('user_id', user?.user_id);
-              processFormData.append('project_id', Number(selectedProject));
-              processFormData.append('task_id', Number(selectedTask));
-              if (geminiApiKey) processFormData.append('gemini_api_key', geminiApiKey);
-              
-              const processRes = await nodeApi.post('/tracker/process-excel', processFormData, {
-                headers: {
-                  'Content-Type': 'multipart/form-data'
-                },
-                timeout: 300000 // 5 minutes for processing
-              });
-              
-              log('[Tracker] Process-excel response:', processRes.data);
-              
-              // More lenient success check - accept various success indicators
-              const isSuccess = 
-                processRes.status === 200 || 
-                processRes.status === 201 ||
-                processRes.data?.success === true || 
-                processRes.data?.success === 1 ||
-                processRes.data?.status === 'success' ||
-                processRes.data?.status === 200 ||
-                processRes.data?.message?.toLowerCase().includes('success');
-              
-              if (isSuccess) {
-                log('[Tracker] File processed successfully, hashes created');
-                toast.success("File processed and hashes created successfully!");
-              } else {
-                logError('[Tracker] File processing failed:', processRes.data);
-                toast.error("Tracker added but file processing failed. Contact support.");
-              }
-            } catch (processError) {
-              logError('[Tracker] Error in process-excel:', processError);
-              toast.error("Tracker added but file processing failed. Contact support.");
-            }
-          }
-          
           toast.success("Tracker added successfully!");
-          
-          // Reset form and close modal
           resetModalForm();
           setShowModal(false);
-          
-          // Refresh the tracker table
           fetchTrackers();
         } else {
           logError('[Tracker] Unexpected response:', res.data);
