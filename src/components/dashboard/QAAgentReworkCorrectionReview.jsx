@@ -66,7 +66,8 @@ const dummyPendingReviews = [
     tracker_data: { tracker_id: 1002 },
     qc_record_id: 102,
     correction_id: 502,
-    rework_id: null
+    rework_id: null,
+    completed: false
   },
   {
     id: 3,
@@ -149,7 +150,8 @@ const dummyPendingReviews = [
     tracker_data: { tracker_id: 1006 },
     qc_record_id: 106,
     correction_id: 503,
-    rework_id: null
+    rework_id: null,
+    completed: false
   },
   {
     id: 7,
@@ -172,6 +174,8 @@ const dummyPendingReviews = [
     rework_id: 604
   }
 ];
+
+
 
 const QAAgentReworkCorrectionReview = () => {
   const navigate = useNavigate();
@@ -285,7 +289,7 @@ const QAAgentReworkCorrectionReview = () => {
       <div className="bg-white rounded-2xl shadow-xl border-2 border-slate-200 overflow-hidden" style={{ height: 'calc(100vh - 400px)', minHeight: '600px' }}>
         {filteredAgents.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center p-16">
-            <div className="w-24 h-24 bg-gradient-to-br from-slate-100 to-slate-200 rounded-3xl flex items-center justify-center mb-6 shadow-inner">
+            <div className="w-24 h-24 bg-linear-to-br from-slate-100 to-slate-200 rounded-3xl flex items-center justify-center mb-6 shadow-inner">
               <CheckCircle2 className="w-12 h-12 text-green-500" />
             </div>
             <h3 className="text-xl font-bold text-slate-800 mb-3">No Pending Reviews</h3>
@@ -296,9 +300,9 @@ const QAAgentReworkCorrectionReview = () => {
         ) : (
           <div className="flex h-full">
             {/* Left Sidebar - Agent List */}
-            <div className="w-80 border-r-2 border-slate-200 bg-gradient-to-b from-slate-50 to-white flex flex-col">
+            <div className="w-80 border-r-2 border-slate-200 bg-linear-to-b from-slate-50 to-white flex flex-col">
               {/* Sidebar Header */}
-              <div className="px-5 py-4 border-b-2 border-slate-200 bg-gradient-to-r from-blue-600 to-indigo-600">
+              <div className="px-5 py-4 border-b-2 border-slate-200 bg-linear-to-r from-blue-600 to-indigo-600">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
                     <UsersIcon className="w-5 h-5 text-white" />
@@ -348,11 +352,11 @@ const QAAgentReworkCorrectionReview = () => {
                       }`}
                     >
                       {isSelected && (
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-600 to-indigo-600"></div>
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-linear-to-b from-blue-600 to-indigo-600"></div>
                       )}
 
                       <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-blue-100 to-indigo-100">
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-linear-to-br from-blue-100 to-indigo-100">
                           <UsersIcon className="w-6 h-6 text-blue-600" />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -361,7 +365,7 @@ const QAAgentReworkCorrectionReview = () => {
                               {agent.agent_name}
                             </h4>
                             {isSelected && (
-                              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm">
+                              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-linear-to-r from-blue-600 to-indigo-600 text-white shadow-sm">
                                 <Check className="w-3 h-3" />
                                 <span className="text-xs font-bold">Selected</span>
                               </div>
@@ -390,14 +394,14 @@ const QAAgentReworkCorrectionReview = () => {
             </div>
 
             {/* Right Panel - Agent's Records */}
-            <div className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 to-blue-50/30">
+            <div className="flex-1 flex flex-col bg-linear-to-br from-slate-50 to-blue-50/30">
               {selectedAgentId && selectedAgent ? (
                 <>
                   {/* Header */}
                   <div className="px-6 py-5 border-b-2 border-slate-200 bg-white">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
+                        <div className="w-14 h-14 rounded-2xl bg-linear-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
                           <UsersIcon className="w-7 h-7 text-white" />
                         </div>
                         <div>
@@ -447,7 +451,7 @@ const QAAgentReworkCorrectionReview = () => {
                     ) : (
                       <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
                         <table className="w-full text-sm">
-                          <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+                          <thead className="bg-linear-to-r from-blue-600 to-indigo-600 text-white">
                             <tr>
                               <th className="px-4 py-3 text-left font-semibold">Type</th>
                               <th className="px-4 py-3 text-left font-semibold">Project / Task</th>
@@ -470,6 +474,19 @@ const QAAgentReworkCorrectionReview = () => {
                                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-700">
                                       <AlertCircle className="w-3 h-3" /> Correction
                                     </span>
+                                  )}
+                                  {/* Completed toggle for corrections */}
+                                  {record.review_type === 'correction' && (
+                                    <div className="mt-2 flex items-center gap-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={!!record.completed}
+                                        onChange={() => handleToggleCompleted(record.id)}
+                                        id={`completed-toggle-${record.id}`}
+                                        className="accent-green-600 w-4 h-4"
+                                      />
+                                      <label htmlFor={`completed-toggle-${record.id}`} className={`text-xs font-medium ${record.completed ? 'text-green-700' : 'text-slate-500'}`}>{record.completed ? 'Completed' : 'Not Completed'}</label>
+                                    </div>
                                   )}
                                 </td>
                                 <td className="px-4 py-3">
@@ -545,7 +562,7 @@ const QAAgentReworkCorrectionReview = () => {
               ) : (
                 <div className="h-full flex items-center justify-center p-16">
                   <div className="text-center">
-                    <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                    <div className="w-24 h-24 bg-linear-to-br from-blue-100 to-indigo-100 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg">
                       <UsersIcon className="w-12 h-12 text-blue-600" />
                     </div>
                     <h3 className="text-xl font-bold text-slate-800 mb-2">Select an Agent</h3>
@@ -563,7 +580,7 @@ const QAAgentReworkCorrectionReview = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeErrorModal}></div>
           <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-gradient-to-r from-red-600 to-red-700">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-linear-to-r from-red-600 to-red-700">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
                   <AlertTriangle className="w-5 h-5 text-white" />
@@ -610,6 +627,5 @@ const QAAgentReworkCorrectionReview = () => {
       )}
     </>
   );
-};
-
+}
 export default QAAgentReworkCorrectionReview;

@@ -13,8 +13,10 @@ import { fetchProjectCategoryAFD, generateQCSample } from "../../services/qcServ
 import { useAuth } from "../../context/AuthContext";
 import { useDeviceInfo } from "../../hooks/useDeviceInfo";
 import { log, logError } from "../../config/environment";
+
 import QAAgentQCFormReport from "./QAAgentQCFormReport";
 import QAAgentReworkCorrectionReview from "./QAAgentReworkCorrectionReview";
+import { DateRangePicker } from '../common/CustomCalendar';
 
 // Helper to get today's date in YYYY-MM-DD format
 const getTodayDate = () => {
@@ -74,6 +76,22 @@ const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading }) => {
     }
     return <span className="text-xs text-slate-500">—</span>;
   };
+
+
+  // Local state for correction status selection per tracker
+  const [correctionStatus, setCorrectionStatus] = useState({});
+
+  useEffect(() => {
+    // Always initialize to empty string so user must select
+    const initial = {};
+    trackers.forEach((tracker, idx) => {
+      if (tracker.type === 'correction') {
+        const trackerId = tracker.qc_record_id || tracker.id || `tracker-${idx}`;
+        initial[trackerId] = '';
+      }
+    });
+    setCorrectionStatus(initial);
+  }, [trackers]);
 
   return (
     <>
@@ -154,7 +172,6 @@ const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading }) => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          // tracker_id is now included from API response
                           handleQCForm(tracker);
                         }}
                         disabled={qcFormLoading === trackerId}
@@ -172,6 +189,33 @@ const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading }) => {
                           </>
                         )}
                       </button>
+                    ) : tracker.type === 'correction' ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <select
+                          value={correctionStatus[trackerId] || ''}
+                          onChange={e => {
+                            setCorrectionStatus(prev => ({ ...prev, [trackerId]: e.target.value }));
+                          }}
+                          required
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold border ${correctionStatus[trackerId] === undefined || correctionStatus[trackerId] === '' ? 'bg-slate-100 text-slate-500 border-slate-300' : correctionStatus[trackerId] === 'completed' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-yellow-100 text-yellow-700 border-yellow-300'}`}
+                          style={{ minWidth: 120 }}
+                        >
+                          <option value="" disabled>Select status</option>
+                          <option value="completed">Completed</option>
+                          <option value="not_completed">Not Completed</option>
+                        </select>
+                        {correctionStatus[trackerId] && (
+                          <button
+                            className="mt-1 px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors"
+                            onClick={() => {
+                              // TODO: Call API here to save status
+                              toast.success('Correction status saved!');
+                            }}
+                          >
+                            Save Status
+                          </button>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-slate-400 text-xs">—</span>
                     )}
@@ -1104,36 +1148,20 @@ const QAAgentList = () => {
                         </div>
                       </div>
 
-                      {/* Date Filter */}
+                      {/* Date Filter - Use DateRangePicker */}
                       <div className="px-6 py-3 bg-white border-b border-slate-200">
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-2">
-                            <label className="text-xs font-semibold text-slate-600">From:</label>
-                            <input
-                              type="date"
-                              value={agentDateFilters[selectedAgentId]?.startDate || getTodayDate()}
-                              onChange={(e) => handleAgentStartDateChange(selectedAgentId, e.target.value)}
-                              className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:border-blue-500 outline-none"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <label className="text-xs font-semibold text-slate-600">To:</label>
-                            <input
-                              type="date"
-                              value={agentDateFilters[selectedAgentId]?.endDate || getTodayDate()}
-                              onChange={(e) => handleAgentEndDateChange(selectedAgentId, e.target.value)}
-                              className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:border-blue-500 outline-none"
-                            />
-                          </div>
-                          <button
-                            onClick={() => handleResetAgentFilters(selectedAgentId)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium transition-colors"
-                            type="button"
-                          >
-                            <RotateCcw className="w-3 h-3" />
-                            Today
-                          </button>
-                        </div>
+                        <DateRangePicker
+                          startDate={agentDateFilters[selectedAgentId]?.startDate || ''}
+                          endDate={agentDateFilters[selectedAgentId]?.endDate || ''}
+                          onStartDateChange={(date) => handleAgentStartDateChange(selectedAgentId, date)}
+                          onEndDateChange={(date) => handleAgentEndDateChange(selectedAgentId, date)}
+                          onClear={() => handleResetAgentFilters(selectedAgentId)}
+                          label=""
+                          description=""
+                          showClearButton={true}
+                          noWrapper={true}
+                          fieldWidth="200px"
+                        />
                       </div>
 
                       {/* Files Table */}
@@ -1428,36 +1456,20 @@ const QAAgentList = () => {
                         </div>
                       </div>
 
-                      {/* Date Filter */}
+                      {/* Date Filter - Use DateRangePicker */}
                       <div className="px-6 py-3 bg-white border-b border-slate-200">
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-2">
-                            <label className="text-xs font-semibold text-slate-600">From:</label>
-                            <input
-                              type="date"
-                              value={agentDateFilters[selectedAgentId]?.startDate || getTodayDate()}
-                              onChange={(e) => handleAgentStartDateChange(selectedAgentId, e.target.value)}
-                              className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:border-blue-500 outline-none"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <label className="text-xs font-semibold text-slate-600">To:</label>
-                            <input
-                              type="date"
-                              value={agentDateFilters[selectedAgentId]?.endDate || getTodayDate()}
-                              onChange={(e) => handleAgentEndDateChange(selectedAgentId, e.target.value)}
-                              className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:border-blue-500 outline-none"
-                            />
-                          </div>
-                          <button
-                            onClick={() => handleResetAgentFilters(selectedAgentId)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium transition-colors"
-                            type="button"
-                          >
-                            <RotateCcw className="w-3 h-3" />
-                            Today
-                          </button>
-                        </div>
+                        <DateRangePicker
+                          startDate={agentDateFilters[selectedAgentId]?.startDate || ''}
+                          endDate={agentDateFilters[selectedAgentId]?.endDate || ''}
+                          onStartDateChange={(date) => handleAgentStartDateChange(selectedAgentId, date)}
+                          onEndDateChange={(date) => handleAgentEndDateChange(selectedAgentId, date)}
+                          onClear={() => handleResetAgentFilters(selectedAgentId)}
+                          label=""
+                          description=""
+                          showClearButton={true}
+                          noWrapper={true}
+                          fieldWidth="200px"
+                        />
                       </div>
 
                       {/* Pending Files Table */}
