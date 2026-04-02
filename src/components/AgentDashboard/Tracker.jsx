@@ -654,23 +654,15 @@ const Tracker = ({ embedded = false }) => {
       const clientErrors = validate();
       setErrors(clientErrors);
       forceUpdate(n => n + 1);
-      
-      if (Object.keys(clientErrors).length > 0) {
-        return;
-      }
-      
+      if (Object.keys(clientErrors).length > 0) return;
       if (fileError) {
         toast.error("Please fix file upload errors before submitting", { duration: 4000 });
         return;
       }
-      
-      // Check if file is uploaded when validations are required
       if ((requiresAIValidation || requiresDuplicateCheck) && !file) {
         toast.error("Please upload a file to complete required validations", { duration: 4000 });
         return;
       }
-      
-      // Check if AI Evaluation is required and completed successfully
       if (requiresAIValidation && file) {
         if (!aiEvalComplete) {
           toast.error("Please complete AI Evaluation before submitting", { duration: 4000 });
@@ -693,9 +685,7 @@ const Tracker = ({ embedded = false }) => {
           return;
         }
       }
-      
       setSubmitting(true);
-      
       if (!selectedProject || !selectedTask || !productionTarget) {
         toast.error("Please fill in all required fields");
         setSubmitting(false);
@@ -777,12 +767,8 @@ const Tracker = ({ embedded = false }) => {
           }
           
           toast.success("Tracker added successfully!");
-          
-          // Reset form and close modal
           resetModalForm();
           setShowModal(false);
-          
-          // Refresh the tracker table
           fetchTrackers();
         } else {
           logError('[Tracker] Unexpected response:', res.data);
