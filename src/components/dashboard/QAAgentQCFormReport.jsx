@@ -22,6 +22,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import LoadingSpinner from '../common/LoadingSpinner';
+import CustomSelect from '../common/CustomSelect';
 import api from '../../services/api';
 
 const QAAgentQCFormReport = () => {
@@ -246,26 +247,31 @@ const QAAgentQCFormReport = () => {
 
           {/* Status Filter */}
           <div className="flex items-center gap-2">
-            <Filter className="w-5 h-5 text-slate-600" />
-            <select
+            <CustomSelect
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2.5 border-2 border-slate-300 rounded-lg bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none font-medium"
-            >
-              <option value="all">All Status</option>
-              <option value="regular">Regular</option>
-              <option value="correction">Correction</option>
-              <option value="rework">Rework</option>
-            </select>
+              onChange={(value) => setStatusFilter(value)}
+              options={[
+                { value: 'all', label: 'All Status' },
+                { value: 'regular', label: 'Regular' },
+                { value: 'correction', label: 'Correction' },
+                { value: 'rework', label: 'Rework' }
+              ]}
+              icon={Filter}
+              placeholder="Filter by status"
+              className="w-48"
+            />
           </div>
 
-          {/* Refresh Button */}
+          {/* Clear Filter Button */}
           <button
-            onClick={fetchQCHistory}
+            onClick={() => {
+              setSearchTerm('');
+              setStatusFilter('all');
+            }}
             className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
           >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
+            <X className="w-4 h-4" />
+            Clear Filter
           </button>
         </div>
       </div>

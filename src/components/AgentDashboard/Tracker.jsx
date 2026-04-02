@@ -33,8 +33,6 @@ const getTodayDate = () => {
 };
 
 const Tracker = ({ embedded = false }) => {
-  console.log('🟢 Tracker is rendering, embedded:', embedded);
-  
   // Auth context for user info
   const { user } = useAuth();
   
@@ -84,7 +82,6 @@ const Tracker = ({ embedded = false }) => {
   // Validation requirements based on project configuration
   const [requiresAIValidation, setRequiresAIValidation] = useState(false);
   const [requiresDuplicateCheck, setRequiresDuplicateCheck] = useState(false);
-  const [isDuplicateCheckDisabled, setIsDuplicateCheckDisabled] = useState(false);
 
   // Sync geminiApiKey with sessionStorage
   useEffect(() => {
@@ -223,7 +220,6 @@ const Tracker = ({ embedded = false }) => {
     setDuplicateCheckSuccess(null);
     setDuplicateCheckError("");
     setDuplicateCheckResult(null);
-    setIsDuplicateCheckDisabled(false);
     
     // Reset validation states
     setErrors({});
@@ -261,9 +257,6 @@ const Tracker = ({ embedded = false }) => {
         const res = await api.post("/dropdown/get", payload);
         const projectsWithTasks = res.data?.data || [];
         
-        console.log('[Tracker] Projects fetched from API:', projectsWithTasks);
-        console.log('[Tracker] Sample project structure:', projectsWithTasks[0]);
-        
         setProjects(projectsWithTasks);
       } catch (error) {
         logError('[Tracker] Error fetching projects with tasks:', error);
@@ -294,13 +287,6 @@ const Tracker = ({ embedded = false }) => {
     // Set validation requirements based on project configuration
     const requiresAI = project?.requires_ai_evaluation ?? false;
     const requiresDuplicate = project?.requires_duplicate_check ?? false;
-    
-    console.log('[Tracker] Project validation requirements:', {
-      project_id: project?.project_id,
-      project_name: project?.project_name,
-      requires_ai_evaluation: requiresAI,
-      requires_duplicate_check: requiresDuplicate
-    });
     
     setRequiresAIValidation(requiresAI);
     setRequiresDuplicateCheck(requiresDuplicate);
@@ -467,11 +453,6 @@ const Tracker = ({ embedded = false }) => {
       return;
     }
 
-    if (!geminiApiKey) {
-      toast.error('Gemini API key required.', { duration: 5000 });
-      return;
-    }
-
     setIsDuplicateChecking(true);
     setDuplicateCheckProgress(0);
     setDuplicateCheckSuccess(null);
@@ -487,7 +468,6 @@ const Tracker = ({ embedded = false }) => {
       formData.append('user_id', user?.user_id || 1);
       formData.append('project_id', Number(selectedProject));
       formData.append('task_id', Number(selectedTask));
-      if (geminiApiKey) formData.append('gemini_api_key', geminiApiKey);
 
       // Simulate progress
       progressInterval = setInterval(() => {
@@ -620,9 +600,19 @@ const Tracker = ({ embedded = false }) => {
 
   // Live validation on field change
   useEffect(() => {
-    setErrors(validate());
-    // eslint-disable-next-line
-  }, [selectedProject, selectedTask, shiftType, baseTarget, productionTarget]);
+    const newErrors = {};
+    if (!selectedProject) newErrors.selectedProject = "Project is required.";
+    if (!selectedTask) newErrors.selectedTask = "Task is required.";
+    if (!shiftType) newErrors.shiftType = "Shift is required.";
+    if (!baseTarget) newErrors.baseTarget = "Base Target is required.";
+    if (!productionTarget) newErrors.productionTarget = "Production Target is required.";
+    else if (isNaN(Number(productionTarget)) || Number(productionTarget) < 0) newErrors.productionTarget = "Enter a valid number.";
+    else if (baseTarget && Number(productionTarget) > (Number(baseTarget) * 2)) {
+      newErrors.productionTarget = `Production cannot exceed double the Base Target (Max: ${Number(baseTarget) * 2})`;
+    }
+    if (fileError) newErrors.file = fileError;
+    setErrors(newErrors);
+  }, [selectedProject, selectedTask, shiftType, baseTarget, productionTarget, fileError]);
 
   // Handle blur for live validation
   const handleBlur = (field) => {
@@ -675,7 +665,7 @@ const Tracker = ({ embedded = false }) => {
       }
       
       // Check if Duplicate Check is required and completed successfully
-      if (requiresDuplicateCheck && file && !isDuplicateCheckDisabled) {
+      if (requiresDuplicateCheck && file) {
         if (!duplicateCheckComplete) {
           toast.error("Please complete Duplicate Check before submitting", { duration: 4000 });
           return;
@@ -696,7 +686,6 @@ const Tracker = ({ embedded = false }) => {
       formData.append('project_id', Number(selectedProject));
       formData.append('task_id', Number(selectedTask));
       formData.append('shift', shiftType);
-      console.log('[Tracker] Submitting shift value:', shiftType);
       formData.append('user_id', user?.user_id);
       formData.append('production', Number(productionTarget));
       formData.append('tenure_target', Number(baseTarget));
@@ -712,7 +701,61 @@ const Tracker = ({ embedded = false }) => {
       try {
         log('[Tracker] Submitting tracker with FormData');
         
-        // First, submit the tracker
+        // If file is uploaded, run process-excel first to create hashes
+        if (file) {
+          try {
+            log('[Tracker] Running process-excel for file processing first');
+            
+            // Get the selected project's requires_duplicate_check value
+            const selectedProjectData = projects.find(p => p.project_id === Number(selectedProject));
+            const projectRequiresDuplicateCheck = selectedProjectData?.requires_duplicate_check || false;
+            
+            const processFormData = new FormData();
+            processFormData.append('file', file);
+            processFormData.append('user_id', user?.user_id);
+            processFormData.append('project_id', Number(selectedProject));
+            processFormData.append('task_id', Number(selectedTask));
+            processFormData.append('duplicate_check', projectRequiresDuplicateCheck);
+            if (geminiApiKey) processFormData.append('gemini_api_key', geminiApiKey);
+            
+            const processRes = await nodeApi.post('/tracker/process-excel', processFormData, {
+              headers: {
+                'Content-Type': 'multipart/form-data'
+              },
+              timeout: 300000 // 5 minutes for processing
+            });
+            
+            log('[Tracker] Process-excel response:', processRes.data);
+            
+            // More lenient success check - accept various success indicators
+            const isSuccess = 
+              processRes.status === 200 || 
+              processRes.status === 201 ||
+              processRes.data?.success === true || 
+              processRes.data?.success === 1 ||
+              processRes.data?.status === 'success' ||
+              processRes.data?.status === 200 ||
+              processRes.data?.message?.toLowerCase().includes('success');
+            
+            if (!isSuccess) {
+              logError('[Tracker] File processing failed:', processRes.data);
+              toast.error("File processing failed. Please check your file and try again.");
+              setSubmitting(false);
+              return;
+            }
+            
+            log('[Tracker] File processed successfully, proceeding to add tracker');
+            toast.success("File processed successfully!");
+          } catch (processError) {
+            logError('[Tracker] Error in process-excel:', processError);
+            const errorMsg = processError?.response?.data?.message || processError?.message || "File processing failed.";
+            toast.error(filterApiErrorMessage(errorMsg));
+            setSubmitting(false);
+            return;
+          }
+        }
+        
+        // Now submit the tracker (only after successful file processing or if no file)
         const res = await api.post("/tracker/add", formData, {
           headers: {
             'Content-Type': 'multipart/form-data'
@@ -721,51 +764,6 @@ const Tracker = ({ embedded = false }) => {
         
         if (res.data?.status === 201 || res.status === 201 || res.status === 200) {
           log('[Tracker] Tracker added successfully');
-          
-          // If file is uploaded, run process-excel to create hashes
-          if (file) {
-            try {
-              log('[Tracker] Running process-excel for file processing');
-              const processFormData = new FormData();
-              processFormData.append('file', file);
-              processFormData.append('user_id', user?.user_id);
-              processFormData.append('project_id', Number(selectedProject));
-              processFormData.append('task_id', Number(selectedTask));
-              processFormData.append('duplicate_check', !isDuplicateCheckDisabled);
-              if (geminiApiKey) processFormData.append('gemini_api_key', geminiApiKey);
-              
-              const processRes = await nodeApi.post('/tracker/process-excel', processFormData, {
-                headers: {
-                  'Content-Type': 'multipart/form-data'
-                },
-                timeout: 300000 // 5 minutes for processing
-              });
-              
-              log('[Tracker] Process-excel response:', processRes.data);
-              
-              // More lenient success check - accept various success indicators
-              const isSuccess = 
-                processRes.status === 200 || 
-                processRes.status === 201 ||
-                processRes.data?.success === true || 
-                processRes.data?.success === 1 ||
-                processRes.data?.status === 'success' ||
-                processRes.data?.status === 200 ||
-                processRes.data?.message?.toLowerCase().includes('success');
-              
-              if (isSuccess) {
-                log('[Tracker] File processed successfully, hashes created');
-                toast.success("File processed and hashes created successfully!");
-              } else {
-                logError('[Tracker] File processing failed:', processRes.data);
-                toast.error("Tracker added but file processing failed. Contact support.");
-              }
-            } catch (processError) {
-              logError('[Tracker] Error in process-excel:', processError);
-              toast.error("Tracker added but file processing failed. Contact support.");
-            }
-          }
-          
           toast.success("Tracker added successfully!");
           resetModalForm();
           setShowModal(false);
@@ -847,7 +845,6 @@ const Tracker = ({ embedded = false }) => {
         const fetchedTrackers = responseData.trackers || [];
         const enrichedTrackers = fetchedTrackers.map(tracker => {
           const shiftValue = (tracker.shift || '').toString().toLowerCase();
-          console.log('[Tracker] Raw shift from backend:', tracker.shift, '=> normalized:', shiftValue);
           return {
             ...tracker,
             project_name: tracker.project_name || getProjectName(tracker.project_id),
@@ -1605,10 +1602,10 @@ const Tracker = ({ embedded = false }) => {
 
         {/* Add Tracker Modal */}
         {showModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl transform transition-all my-8 animate-fade-in">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl transform transition-all my-8 animate-fade-in max-h-[calc(100vh-4rem)] flex flex-col">
               {/* Modal Header */}
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-2.5 rounded-t-2xl">
+              <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-2.5 rounded-t-2xl flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
@@ -1638,8 +1635,9 @@ const Tracker = ({ embedded = false }) => {
               </div>
 
               {/* Modal Body */}
-              <form className="p-4" onSubmit={handleSubmit}>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+              <div className="overflow-y-auto flex-1">
+                <form className="p-4" onSubmit={handleSubmit}>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
                   {/* Project Selection */}
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wide">
@@ -2031,23 +2029,6 @@ const Tracker = ({ embedded = false }) => {
                         </div>
                         )}
 
-                        {/* Duplicate Check Toggle */}
-                        <div className="md:col-span-2 flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200 mt-2">
-                          <label className="relative inline-flex items-center cursor-pointer">
-                            <input 
-                              type="checkbox" 
-                              className="sr-only peer" 
-                              checked={isDuplicateCheckDisabled}
-                              onChange={(e) => setIsDuplicateCheckDisabled(e.target.checked)}
-                            />
-                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                            <span className="ml-3 text-sm font-bold text-slate-700">Disable Duplicate Check</span>
-                          </label>
-                          <div className="flex-1 text-xs text-slate-500 italic">
-                            (If enabled, file will be processed even if duplicate records are found)
-                          </div>
-                        </div>
-
                         {/* Duplicate Check Button - only show if required */}
                         {requiresDuplicateCheck && (
                         <div>
@@ -2110,7 +2091,7 @@ const Tracker = ({ embedded = false }) => {
                                   <>
                                   {/* Duplicates List */}
                               {duplicateCheckResult.duplicates && duplicateCheckResult.duplicates.length > 0 && (
-                                <div className="mt-4 max-h-80 overflow-y-auto space-y-3 border-t border-red-100 pt-4 pr-1">
+                                <div className="mt-4 max-h-60 overflow-y-auto space-y-3 border-t border-red-100 pt-4 pr-1">
                                   <p className="text-[11px] font-bold text-red-800 uppercase tracking-wider mb-2">Duplicate Records Grouped by Match:</p>
                                   
                                   {/* Group duplicates by hash */}
@@ -2283,6 +2264,7 @@ const Tracker = ({ embedded = false }) => {
                   )}
                 </div>
               </form>
+              </div>
             </div>
           </div>
         )}

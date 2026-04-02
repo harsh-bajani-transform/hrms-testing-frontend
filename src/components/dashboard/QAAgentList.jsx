@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RotateCcw, Check, Loader2, RefreshCw, AlertTriangle, XCircle, AlertCircle, CheckCircle2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import api from "../../services/api";
+import nodeApi from "../../services/nodeApi";
 import { fetchProjectCategoryAFD, generateQCSample } from "../../services/qcService";
 import { useAuth } from "../../context/AuthContext";
 import { useDeviceInfo } from "../../hooks/useDeviceInfo";
@@ -25,7 +26,7 @@ const getTodayDate = () => {
 };
 
 // Pending QC Files Table Component
-const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading }) => {
+const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSaveStatus, savingStatus, correctionStatus, setCorrectionStatus, user, selectedAgentId, agentDateFilters, getTodayDate, fetchReworkTrackers }) => {
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
 
   const formatDateTime = (dateString) => {
@@ -76,22 +77,6 @@ const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading }) => {
     }
     return <span className="text-xs text-slate-500">—</span>;
   };
-
-
-  // Local state for correction status selection per tracker
-  const [correctionStatus, setCorrectionStatus] = useState({});
-
-  useEffect(() => {
-    // Always initialize to empty string so user must select
-    const initial = {};
-    trackers.forEach((tracker, idx) => {
-      if (tracker.type === 'correction') {
-        const trackerId = tracker.qc_record_id || tracker.id || `tracker-${idx}`;
-        initial[trackerId] = '';
-      }
-    });
-    setCorrectionStatus(initial);
-  }, [trackers]);
 
   return (
     <>
@@ -196,23 +181,29 @@ const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading }) => {
                           onChange={e => {
                             setCorrectionStatus(prev => ({ ...prev, [trackerId]: e.target.value }));
                           }}
+                          disabled={savingStatus[trackerId]}
                           required
-                          className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold border ${correctionStatus[trackerId] === undefined || correctionStatus[trackerId] === '' ? 'bg-slate-100 text-slate-500 border-slate-300' : correctionStatus[trackerId] === 'completed' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-yellow-100 text-yellow-700 border-yellow-300'}`}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold border ${correctionStatus[trackerId] === undefined || correctionStatus[trackerId] === '' ? 'bg-slate-100 text-slate-500 border-slate-300' : correctionStatus[trackerId] === 'completed' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-yellow-100 text-yellow-700 border-yellow-300'} ${savingStatus[trackerId] ? 'opacity-60 cursor-not-allowed' : ''}`}
                           style={{ minWidth: 120 }}
                         >
                           <option value="" disabled>Select status</option>
                           <option value="completed">Completed</option>
-                          <option value="not_completed">Not Completed</option>
+                          <option value="correction">Correction</option>
                         </select>
                         {correctionStatus[trackerId] && (
                           <button
-                            className="mt-1 px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors"
-                            onClick={() => {
-                              // TODO: Call API here to save status
-                              toast.success('Correction status saved!');
-                            }}
+                            className="mt-1 px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors flex items-center gap-1"
+                            onClick={() => handleSaveStatus(tracker, trackerId)}
+                            disabled={savingStatus[trackerId]}
                           >
-                            Save Status
+                            {savingStatus[trackerId] ? (
+                              <>
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Saving...
+                              </>
+                            ) : (
+                              'Save Status'
+                            )}
                           </button>
                         )}
                       </div>
@@ -310,6 +301,10 @@ const QAAgentList = () => {
   // Project/task name mapping state
   const [projectNameMap, setProjectNameMap] = useState({});
   const [taskNameMap, setTaskNameMap] = useState({});
+
+  // Local state for correction status selection per tracker
+  const [correctionStatus, setCorrectionStatus] = useState({});
+  const [savingStatus, setSavingStatus] = useState({});
 
 
   // Fetch project/task mapping, then tracker data
@@ -457,6 +452,21 @@ const QAAgentList = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  // Initialize correction status when trackers change
+  useEffect(() => {
+    if (activeTab === 'rework_review' && selectedAgentId) {
+      const trackers = agentTrackers[selectedAgentId] || [];
+      const initial = {};
+      trackers.forEach((tracker, idx) => {
+        if (tracker.type === 'correction') {
+          const trackerId = tracker.qc_record_id || tracker.id || `tracker-${idx}`;
+          initial[trackerId] = '';
+        }
+      });
+      setCorrectionStatus(initial);
+    }
+  }, [agentTrackers, selectedAgentId, activeTab]);
 
   // Fetch tracker data for specific agent with date range
   const fetchAgentTrackers = async (agentId, startDate = null, endDate = null) => {
@@ -738,6 +748,80 @@ const QAAgentList = () => {
       fetchReworkTrackers(agentId, today, today);
     } else {
       fetchAgentTrackers(agentId, today, today);
+    }
+  };
+
+  // Handler to save correction status
+  const handleSaveStatus = async (tracker, trackerId) => {
+    const selectedStatus = correctionStatus[trackerId];
+    
+    if (!selectedStatus) {
+      toast.error('Please select a status');
+      return;
+    }
+
+    // Validate required fields
+    if (!tracker.agent_id) {
+      toast.error('Agent ID is missing');
+      return;
+    }
+    if (!tracker.project_id) {
+      toast.error('Project ID is missing');
+      return;
+    }
+    if (!tracker.task_id) {
+      toast.error('Task ID is missing');
+      return;
+    }
+    if (!tracker.tracker_id) {
+      toast.error('Tracker ID is missing');
+      return;
+    }
+
+    setSavingStatus(prev => ({ ...prev, [trackerId]: true }));
+    const loadingToast = toast.loading('Saving status...');
+
+    try {
+      const payload = {
+        agent_id: tracker.agent_id,
+        logged_in_user_id: user?.user_id,
+        project_id: tracker.project_id,
+        task_id: tracker.task_id,
+        qa_user_id: user?.user_id,
+        status: selectedStatus,
+        tracker_id: tracker.tracker_id
+      };
+
+      console.group('[QAAgentList] 💾 Save Correction Status');
+      console.log('Payload:', payload);
+      console.groupEnd();
+
+      const response = await nodeApi.post('/qc-records/save', payload);
+
+      toast.dismiss(loadingToast);
+      
+      // Check for successful response (status code 200-299 means success)
+      if (response.status >= 200 && response.status < 300) {
+        toast.success('Status saved successfully!');
+        
+        // Refresh the data after successful save
+        if (selectedAgentId) {
+          const filters = agentDateFilters[selectedAgentId];
+          await fetchReworkTrackers(
+            selectedAgentId,
+            filters?.startDate || getTodayDate(),
+            filters?.endDate || getTodayDate()
+          );
+        }
+      } else {
+        toast.error(response.data?.message || 'Failed to save status');
+      }
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      console.error('[QAAgentList] Error saving status:', error);
+      toast.error(error.response?.data?.message || 'Failed to save status');
+    } finally {
+      setSavingStatus(prev => ({ ...prev, [trackerId]: false }));
     }
   };
 
@@ -1479,6 +1563,15 @@ const QAAgentList = () => {
                             trackers={trackers}
                             handleQCForm={handleQCForm}
                             qcFormLoading={qcFormLoading}
+                            handleSaveStatus={handleSaveStatus}
+                            savingStatus={savingStatus}
+                            correctionStatus={correctionStatus}
+                            setCorrectionStatus={setCorrectionStatus}
+                            user={user}
+                            selectedAgentId={selectedAgentId}
+                            agentDateFilters={agentDateFilters}
+                            getTodayDate={getTodayDate}
+                            fetchReworkTrackers={fetchReworkTrackers}
                           />
                         ) : (
                           <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center">

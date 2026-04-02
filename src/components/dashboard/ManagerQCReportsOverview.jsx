@@ -26,9 +26,31 @@ import api from '../../services/api';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
+import CustomSelect from '../common/CustomSelect';
+import MultiSelectWithCheckbox from '../common/MultiSelectWithCheckbox';
+import { DateRangePicker } from '../common/CustomCalendar';
 
 const ManagerQCReportsOverview = () => {
   const { user } = useAuth();
+  
+  // Check if user is Assistant Manager (hide team column/filter)
+  const roleId = Number(user?.role_id || user?.user_role_id || 0);
+  const designation = String(user?.designation || user?.user_designation || '').toLowerCase().trim();
+  const roleName = String(user?.role_name || user?.user_role || '').toLowerCase().trim();
+  
+  const isAssistantManager = 
+    roleId === 4 || 
+    designation.includes('assistant') || 
+    designation.includes('asst') ||
+    roleName.includes('assistant') ||
+    roleName.includes('asst');
+  
+  console.log('[ManagerQCReportsOverview] Role Check:', {
+    roleId,
+    designation,
+    roleName,
+    isAssistantManager
+  });
   
   // State management
   const [qcRecords, setQcRecords] = useState([]);
@@ -38,12 +60,62 @@ const ManagerQCReportsOverview = () => {
   const [error, setError] = useState(null);
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
   
+  // Dropdown data from API
+  const [agents, setAgents] = useState([]);
+  const [qaAgents, setQaAgents] = useState([]);
+  const [teams, setTeams] = useState([]);
+  
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [agentFilter, setAgentFilter] = useState('all');
+  const [agentFilter, setAgentFilter] = useState([]); // Multi-select
+  const [qaAgentFilter, setQaAgentFilter] = useState([]); // Multi-select
   const [teamFilter, setTeamFilter] = useState('all');
-  const [dateFilter, setDateFilter] = useState('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // Fetch dropdown data (agents, QA agents, teams)
+  useEffect(() => {
+    const fetchDropdownData = async () => {
+      if (!user?.user_id) return;
+      
+      try {
+        // Fetch agents
+        const agentsResponse = await api.post('/dropdown/get', {
+          logged_in_user_id: user.user_id,
+          dropdown_type: 'agent'
+        });
+        
+        if (agentsResponse.data?.status === 200) {
+          setAgents(agentsResponse.data.data || []);
+        }
+
+        // Fetch QA agents
+        const qaAgentsResponse = await api.post('/dropdown/get', {
+          logged_in_user_id: user.user_id,
+          dropdown_type: 'qa'
+        });
+        
+        if (qaAgentsResponse.data?.status === 200) {
+          setQaAgents(qaAgentsResponse.data.data || []);
+        }
+
+        // Fetch teams
+        const teamsResponse = await api.post('/dropdown/get', {
+          logged_in_user_id: user.user_id,
+          dropdown_type: 'teams'
+        });
+        
+        if (teamsResponse.data?.status === 200) {
+          setTeams(teamsResponse.data.data || []);
+        }
+      } catch (err) {
+        console.error('Error fetching dropdown data:', err);
+        toast.error('Failed to load dropdown data');
+      }
+    };
+
+    fetchDropdownData();
+  }, [user?.user_id]);
 
   // Fetch QC history data
   useEffect(() => {
@@ -80,7 +152,7 @@ const ManagerQCReportsOverview = () => {
   // Apply filters
   useEffect(() => {
     applyFilters();
-  }, [searchTerm, statusFilter, agentFilter, teamFilter, dateFilter, qcRecords]);
+  }, [searchTerm, agentFilter, qaAgentFilter, teamFilter, startDate, endDate, qcRecords]);
 
   const applyFilters = () => {
     let filtered = [...qcRecords];
@@ -95,36 +167,46 @@ const ManagerQCReportsOverview = () => {
       );
     }
 
-    // Status filter
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(record => record.status === statusFilter);
+    // Agent filter (multi-select)
+    if (agentFilter.length > 0) {
+      filtered = filtered.filter(record => 
+        agentFilter.includes(record.agent_id?.toString())
+      );
     }
 
-    // Agent filter
-    if (agentFilter !== 'all') {
-      filtered = filtered.filter(record => record.agent_id?.toString() === agentFilter);
+    // QA Agent filter (multi-select)
+    if (qaAgentFilter.length > 0) {
+      filtered = filtered.filter(record => 
+        qaAgentFilter.includes(record.qa_user_id?.toString())
+      );
     }
 
-    // Team filter
-    if (teamFilter !== 'all') {
-      filtered = filtered.filter(record => record.team_name === teamFilter);
+    // Team filter (skip for Assistant Manager)
+    if (teamFilter !== 'all' && !isAssistantManager) {
+      filtered = filtered.filter(record => record.team_id?.toString() === teamFilter);
     }
 
-    // Date filter
-    if (dateFilter !== 'all') {
-      const now = new Date();
+    // Date range filter
+    if (startDate || endDate) {
       filtered = filtered.filter(record => {
         if (!record.date_of_file_submission) return false;
-        const date = new Date(record.date_of_file_submission);
+        const recordDate = new Date(record.date_of_file_submission);
+        recordDate.setHours(0, 0, 0, 0);
         
-        if (dateFilter === 'today') {
-          return date.toDateString() === now.toDateString();
-        } else if (dateFilter === 'week') {
-          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          return date >= weekAgo;
-        } else if (dateFilter === 'month') {
-          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          return date >= monthAgo;
+        if (startDate && endDate) {
+          const start = new Date(startDate);
+          const end = new Date(endDate);
+          start.setHours(0, 0, 0, 0);
+          end.setHours(23, 59, 59, 999);
+          return recordDate >= start && recordDate <= end;
+        } else if (startDate) {
+          const start = new Date(startDate);
+          start.setHours(0, 0, 0, 0);
+          return recordDate >= start;
+        } else if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          return recordDate <= end;
         }
         return true;
       });
@@ -220,17 +302,30 @@ const ManagerQCReportsOverview = () => {
     setErrorModal({ open: true, errors: parseErrors(errors), title });
   };
 
-  // Get unique agents and teams for filters
-  const uniqueAgents = [...new Map(qcRecords.map(r => [r.agent_id, { id: r.agent_id, name: r.agent_name }])).values()];
-  const uniqueTeams = [...new Set(qcRecords.map(r => r.team_name).filter(Boolean))];
+  // Options for dropdowns from API data
+  const agentOptions = agents.map(agent => ({
+    value: agent.user_id?.toString(),
+    label: agent.label
+  }));
+  
+  const qaAgentOptions = qaAgents.map(qa => ({
+    value: qa.user_id?.toString(),
+    label: qa.label
+  }));
+  
+  const teamOptions = teams.map(team => ({
+    value: team.team_id?.toString(),
+    label: team.label
+  }));
 
   const handleReset = () => {
     setFilteredRecords(qcRecords);
     setSearchTerm('');
-    setStatusFilter('all');
-    setAgentFilter('all');
+    setAgentFilter([]);
+    setQaAgentFilter([]);
     setTeamFilter('all');
-    setDateFilter('all');
+    setStartDate('');
+    setEndDate('');
     setSelectedRecord(null);
   };
 
@@ -276,70 +371,115 @@ const ManagerQCReportsOverview = () => {
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-md p-4 border-2 border-slate-200">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <style>{`
+          .filter-dropdown-wrapper > div > button {
+            height: 46px !important;
+            min-height: 46px !important;
+            max-height: 46px !important;
+          }
+          .date-range-compact > div > div {
+            margin-bottom: 0 !important;
+          }
+          .date-range-compact label {
+            margin-bottom: 6px !important;
+            font-size: 0.75rem !important;
+            font-weight: 700 !important;
+            text-transform: uppercase !important;
+            color: rgb(71 85 105) !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 0.375rem !important;
+          }
+        `}</style>
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 items-end ${isAssistantManager ? 'lg:grid-cols-5' : 'lg:grid-cols-6'}`}>
           {/* Search */}
-          <div className="lg:col-span-2">
+          <div>
+            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-1.5">
+              <Search className="w-3 h-3 text-blue-600" />
+              Search
+            </label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 z-10" />
               <input
                 type="text"
                 placeholder="Search agent, team, project, task..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border-2 border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                className="w-full pl-10 pr-4 py-2.5 border-2 border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none h-[46px]"
               />
             </div>
           </div>
 
-          {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2.5 border-2 border-slate-300 rounded-lg bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none font-medium"
-          >
-            <option value="all">All Status</option>
-            <option value="regular">Passed</option>
-            <option value="correction">Correction</option>
-            <option value="rework">Rework</option>
-          </select>
+          {/* Agent Filter - Multi-select */}
+          <div>
+            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-1.5">
+              <User className="w-3 h-3 text-blue-600" />
+              Agents
+            </label>
+            <div className="filter-dropdown-wrapper">
+              <MultiSelectWithCheckbox
+                value={agentFilter}
+                onChange={setAgentFilter}
+                options={agentOptions}
+                icon={User}
+                placeholder="All Agents"
+                showSelectAll={true}
+              />
+            </div>
+          </div>
 
-          {/* Agent Filter */}
-          <select
-            value={agentFilter}
-            onChange={(e) => setAgentFilter(e.target.value)}
-            className="px-4 py-2.5 border-2 border-slate-300  rounded-lg bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none font-medium"
-          >
-            <option value="all">All Agents</option>
-            {uniqueAgents.map(agent => (
-              <option key={agent.id} value={agent.id}>{agent.name}</option>
-            ))}
-          </select>
+          {/* QA Agent Filter - Multi-select */}
+          <div>
+            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-1.5">
+              <FileCheck className="w-3 h-3 text-blue-600" />
+              QA Agents
+            </label>
+            <div className="filter-dropdown-wrapper">
+              <MultiSelectWithCheckbox
+                value={qaAgentFilter}
+                onChange={setQaAgentFilter}
+                options={qaAgentOptions}
+                icon={FileCheck}
+                placeholder="All QA Agents"
+                showSelectAll={true}
+              />
+            </div>
+          </div>
 
-          {/* Date Filter */}
-          <select
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="px-4 py-2.5 border-2 border-slate-300 rounded-lg bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none font-medium"
-          >
-            <option value="all">All Time</option>
-            <option value="today">Today</option>
-            <option value="week">Last 7 Days</option>
-            <option value="month">Last 30 Days</option>
-          </select>
-        </div>
+          {/* Team Filter (Hidden for Assistant Manager) */}
+          {!isAssistantManager && (
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-1.5">
+                <Users className="w-3 h-3 text-blue-600" />
+                Team
+              </label>
+              <div className="filter-dropdown-wrapper">
+                <CustomSelect
+                  value={teamFilter}
+                  onChange={setTeamFilter}
+                  options={[
+                    { value: 'all', label: 'All Teams' },
+                    ...teamOptions
+                  ]}
+                  icon={Users}
+                  placeholder="Select team"
+                />
+              </div>
+            </div>
+          )}
 
-        {/* Team Filter - Second Row */}
-        <div className="mt-4">
-          <select
-            value={teamFilter}
-            onChange={(e) => setTeamFilter(e.target.value)}
-            className="w-full md:w-auto px-4 py-2.5 border-2 border-slate-300 rounded-lg bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none font-medium"
-          >
-            <option value="all">All Teams</option>
-            {uniqueTeams.map(team => (
-              <option key={team} value={team}>{team}</option>
-            ))}
-          </select>
+          {/* Date Range Filter - Compact */}
+          <div className={`date-range-compact ${isAssistantManager ? 'lg:col-span-2' : 'lg:col-span-2'}`}>
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onStartDateChange={setStartDate}
+              onEndDateChange={setEndDate}
+              showClearButton={false}
+              noWrapper={true}
+              compact={true}
+            />
+          </div>
         </div>
       </div>
 
@@ -351,7 +491,9 @@ const ManagerQCReportsOverview = () => {
               <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 sticky top-0 z-10">
                 <tr>
                   <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase">Agent</th>
-                  <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase">Team</th>
+                  {!isAssistantManager && (
+                    <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase">Team</th>
+                  )}
                   <th className="px-4 py-4 text-center text-xs font-bold text-white uppercase">QA Agent</th>
                   <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase">Project/Task</th>
                   <th className="px-4 py-4 text-center text-xs font-bold text-white uppercase">Score</th>
@@ -366,7 +508,7 @@ const ManagerQCReportsOverview = () => {
               <tbody className="divide-y divide-slate-200">
                 {filteredRecords.length === 0 ? (
                   <tr>
-                    <td colSpan="11" className="px-4 py-12 text-center text-slate-500">
+                    <td colSpan={isAssistantManager ? "10" : "11"} className="px-4 py-12 text-center text-slate-500">
                       <FileCheck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                       <p className="font-bold">No QC records found</p>
                       <p className="text-sm">Try adjusting your filters</p>
@@ -382,12 +524,14 @@ const ManagerQCReportsOverview = () => {
                             <span className="font-semibold text-slate-800 text-sm">{record.agent_name || 'N/A'}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-4">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">
-                            <Users className="w-3 h-3" />
-                            {record.team_name || 'N/A'}
-                          </span>
-                        </td>
+                        {!isAssistantManager && (
+                          <td className="px-4 py-4">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">
+                              <Users className="w-3 h-3" />
+                              {record.team_name || 'N/A'}
+                            </span>
+                          </td>
+                        )}
                         <td className="px-4 py-4 text-center">
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200">
                             <User className="w-3 h-3" />
@@ -462,7 +606,7 @@ const ManagerQCReportsOverview = () => {
                       </tr>
                       {selectedRecord?.id === record.id && (
                         <tr>
-                          <td colSpan="11" className="p-0">
+                          <td colSpan={isAssistantManager ? "10" : "11"} className="p-0">
                             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-t-2 border-blue-200">
                               <div className="p-6">
                                 <h4 className="text-sm font-bold text-indigo-900 mb-4 flex items-center gap-2">

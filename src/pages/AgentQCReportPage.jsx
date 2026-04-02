@@ -2,7 +2,7 @@
  * File: AgentQCReportPage.jsx
  * Description: Agent's QC Report page - simplified table view
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { toast } from 'react-hot-toast';
 import {
   FileCheck,
@@ -16,12 +16,14 @@ import {
   AlertTriangle,
   RefreshCw,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Search
 } from 'lucide-react';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import nodeApi from '../services/nodeApi';
+import { DateRangePicker } from '../components/common/CustomCalendar';
 
 const AgentQCReportPage = () => {
   const { user } = useAuth();
@@ -32,6 +34,10 @@ const AgentQCReportPage = () => {
   const [uploadModal, setUploadModal] = useState({ open: false, record: null, type: '', historyItem: null });
   const [uploadFile, setUploadFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  
+  // Filter states
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch QC history from API
   const fetchQCHistory = async () => {
@@ -218,6 +224,47 @@ const AgentQCReportPage = () => {
     setUploadFile(null);
   };
 
+  // Filter QC records based on date range and search query (project/task)
+  const filteredRecords = useMemo(() => {
+    let filtered = [...qcRecords];
+
+    // Filter by date range
+    if (dateRange.start || dateRange.end) {
+      filtered = filtered.filter(record => {
+        const submissionDate = record.date_of_file_submission ? new Date(record.date_of_file_submission) : null;
+        if (!submissionDate) return false;
+
+        const startDate = dateRange.start ? new Date(dateRange.start) : null;
+        const endDate = dateRange.end ? new Date(dateRange.end) : null;
+
+        if (startDate && submissionDate < startDate) return false;
+        if (endDate) {
+          const endDateTime = new Date(endDate);
+          endDateTime.setHours(23, 59, 59, 999);
+          if (submissionDate > endDateTime) return false;
+        }
+        return true;
+      });
+    }
+
+    // Filter by project name or task name (unified search)
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(record => 
+        record.project_name?.toLowerCase().includes(query) ||
+        record.task_name?.toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
+  }, [qcRecords, dateRange, searchQuery]);
+
+  // Clear all filters
+  const handleClearFilters = () => {
+    setDateRange({ start: '', end: '' });
+    setSearchQuery('');
+  };
+
   const handleFileUpload = async () => {
     if (!uploadFile || !uploadModal.record) {
       toast.error('Please select a file first');
@@ -295,6 +342,69 @@ const AgentQCReportPage = () => {
         </div>
       </div>
 
+      {/* Filters - All in One Line */}
+      <div className="bg-white rounded-lg border border-slate-200 p-4">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-end gap-4">
+          {/* Date Range Filter */}
+          <DateRangePicker
+            startDate={dateRange.start}
+            endDate={dateRange.end}
+            onStartDateChange={(date) => setDateRange(prev => ({ ...prev, start: date }))}
+            onEndDateChange={(date) => setDateRange(prev => ({ ...prev, end: date }))}
+            onClear={handleClearFilters}
+            label=""
+            description=""
+            showClearButton={false}
+            noWrapper={true}
+            fieldWidth="200px"
+          />
+
+          {/* Unified Project/Task Search */}
+          <div style={{ width: '250px' }} className="flex-shrink-0">
+            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-1.5">
+              <Search className="w-3 h-3 text-blue-600" />
+              Project / Task
+            </label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by project or task name..."
+              className="w-full px-3 py-2.5 text-sm border-2 border-blue-200 rounded-lg bg-slate-50 hover:bg-blue-50 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Active Filters & Clear Button */}
+        {(dateRange.start || dateRange.end || searchQuery) && (
+          <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-200">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-bold text-slate-700">Active Filters:</span>
+              {(dateRange.start || dateRange.end) && (
+                <span className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full font-bold shadow-sm">
+                  Date Range
+                </span>
+              )}
+              {searchQuery && (
+                <span className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full font-bold shadow-sm">
+                  Project/Task
+                </span>
+              )}
+              <span className="font-bold text-slate-700 ml-2">
+                Showing <span className="text-blue-700">{filteredRecords.length}</span> of <span className="text-slate-500">{qcRecords.length}</span> records
+              </span>
+            </div>
+            <button
+              onClick={handleClearFilters}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors flex items-center gap-2"
+            >
+              <X className="w-3 h-3" />
+              Clear All Filters
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Table */}
       <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
@@ -312,7 +422,7 @@ const AgentQCReportPage = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {qcRecords.map((record) => {
+              {filteredRecords.map((record) => {
                 const errors = parseErrors(record.error_list);
                 const statusInfo = getStatusInfo(record);
                 const isExpanded = expandedRow === record.id;
@@ -538,6 +648,14 @@ const AgentQCReportPage = () => {
             <FileCheck className="w-12 h-12 mx-auto mb-3 text-slate-300" />
             <p className="font-medium">No QC Records Found</p>
             <p className="text-sm">Your submitted files will appear here after QC review.</p>
+          </div>
+        )}
+
+        {qcRecords.length > 0 && filteredRecords.length === 0 && (
+          <div className="text-center py-12 text-slate-500">
+            <Search className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+            <p className="font-medium">No Records Match Your Filters</p>
+            <p className="text-sm">Try adjusting your search criteria or date range.</p>
           </div>
         )}
       </div>

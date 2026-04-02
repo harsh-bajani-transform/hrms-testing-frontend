@@ -171,11 +171,31 @@ const QAAgentAudit = () => {
     }
     
     filteredData.forEach(record => {
-      const qaName = record.qa_agent_name || 'Unknown QA Agent';
+      const qaName = record.qc_agent_name || 
+                     record.qa_agent_name || 
+                     record.qa_user_name || 
+                     record.qa_name || 
+                     record.qc_name || 
+                     record.checked_by || 
+                     'Unknown QA Agent';
+      
+      // Debug log to see what fields are available
+      if (qaName === 'Unknown QA Agent') {
+        console.log('[QAAgentAudit] Record with unknown QA agent:', {
+          qc_agent_name: record.qc_agent_name,
+          qa_agent_name: record.qa_agent_name,
+          qa_user_name: record.qa_user_name,
+          qa_name: record.qa_name,
+          qc_name: record.qc_name,
+          checked_by: record.checked_by,
+          allKeys: Object.keys(record)
+        });
+      }
+      
       if (!grouped[qaName]) {
         grouped[qaName] = {
           qaAgentName: qaName,
-          qaAgentId: record.qa_agent_id || qaName,
+          qaAgentId: record.qc_agent_id || record.qa_agent_id || record.qa_user_id || qaName,
           records: [],
           totalQCs: 0,
           totalErrors: 0,
@@ -224,32 +244,53 @@ const QAAgentAudit = () => {
     }
     
     filteredData.forEach(record => {
-      const agentName = record.agent_name || 'Unknown Agent';
-      if (!grouped[agentName]) {
-        grouped[agentName] = {
-          qaAgentName: agentName,
+      const qaAgentKey = record.qc_agent_name || 
+                         record.qa_agent_name || 
+                         record.qa_user_name || 
+                         record.qa_name || 
+                         record.qc_name || 
+                         record.checked_by || 
+                         'Unknown QA Agent';
+      
+      // Debug log to see what fields are available
+      if (qaAgentKey === 'Unknown QA Agent') {
+        console.log('[QAAgentAudit] Report record with unknown QA agent:', {
+          qc_agent_name: record.qc_agent_name,
+          qa_agent_name: record.qa_agent_name,
+          qa_user_name: record.qa_user_name,
+          qa_name: record.qa_name,
+          qc_name: record.qc_name,
+          checked_by: record.checked_by,
+          allKeys: Object.keys(record),
+          fullRecord: record
+        });
+      }
+      
+      if (!grouped[qaAgentKey]) {
+        grouped[qaAgentKey] = {
+          qaAgentName: qaAgentKey,
           records: [],
           totalQCs: 0,
           totalErrors: 0,
           avgScore: 0
         };
       }
-      grouped[agentName].records.push(record);
-      grouped[agentName].totalQCs += Number(record.total_qc_performed) || 0;
-      grouped[agentName].totalErrors += Number(record.total_errors_found) || 0;
+      grouped[qaAgentKey].records.push(record);
+      grouped[qaAgentKey].totalQCs += Number(record.total_qc_performed) || 0;
+      grouped[qaAgentKey].totalErrors += Number(record.total_errors_found) || 0;
     });
     
     // Calculate average scores
-    Object.keys(grouped).forEach(agentName => {
-      const records = grouped[agentName].records;
+    Object.keys(grouped).forEach(qaAgentKey => {
+      const records = grouped[qaAgentKey].records;
       if (records.length > 0) {
         const totalScore = records.reduce((sum, r) => sum + (Number(r.average_qc_score) || 0), 0);
-        grouped[agentName].avgScore = (totalScore / records.length).toFixed(2);
+        grouped[qaAgentKey].avgScore = (totalScore / records.length).toFixed(2);
       }
     });
     
     const result = Object.values(grouped);
-    console.log('[QAAgentAudit] Grouped report data:', result.length, 'agents');
+    console.log('[QAAgentAudit] Grouped report data:', result.length, 'QA agents');
     return result;
   }, [reportData, dateRange]);
 
@@ -655,6 +696,7 @@ const QAAgentAudit = () => {
         // Map API response to expected structure
         const mappedData = records.map(record => ({
           agent_name: record.agent_name,
+          qc_agent_name: record.qc_agent_name,
           audit_datetime: record.audit_datetime,
           project_name: record.project,
           task_name: record.task,
@@ -662,6 +704,7 @@ const QAAgentAudit = () => {
           average_qc_score: parseFloat(record.avg_qc_score) || 0,
           total_errors_found: parseFloat(record.total_errors) || 0,
           qc_checked_file: record.qc_checked_file,
+          qc_status: record.qc_status,
           audit_status: record.status,
           notes: record.error_notes,
           comments: record.error_notes

@@ -45,7 +45,6 @@ const Header = ({
   useEffect(() => {
     // eslint-disable-next-line
     Briefcase
-    console.log('Header currentUser:', currentUser);
   }, [currentUser]);
   // Helper to get initials from user's name
   const getInitials = () => {
@@ -76,7 +75,6 @@ const Header = ({
         if (res.success && res.hasKey && res.gemini_api_key) {
           sessionStorage.setItem("gemini_api_key", res.gemini_api_key);
           window.dispatchEvent(new CustomEvent("gemini-key-updated"));
-          console.log('[Header] Gemini API key loaded from DB to sessionStorage');
         }
       } catch (error) {
         console.error("[Header] Failed to load Gemini key:", error);
@@ -113,39 +111,32 @@ const Header = ({
     const roleId = Number(currentUser.role_id);
     const role = (currentUser?.role || currentUser?.role_name || currentUser?.user_role || '').toString().toUpperCase();
     
-    console.log('🚀 [Header goTo] view:', view, 'roleId:', roleId, 'role:', role);
-    
     // Handle Analytics tab for all roles: always go to /dashboard?tab=overview
     if (view === ViewState.DASHBOARD || view === 'DASHBOARD' || view === 'Analytics') {
-      console.log('🚀 [Header goTo] Navigating to Analytics tab /dashboard?tab=overview');
       navigate('/dashboard?tab=overview');
       setIsMobileMenuOpen(false);
       return;
     }
     // Handle QA-specific views
     if (view === 'TRACKER_REPORT') {
-      console.log('🚀 [Header goTo] Navigating to Tracker Report');
       // For Assistant Manager and QA Agent, open the tracker_report tab
       navigate('/dashboard?tab=tracker_report');
       setIsMobileMenuOpen(false);
       return;
     }
     if (view === 'AGENT_LIST') {
-      console.log('🚀 [Header goTo] Navigating to Agent File Report');
       // For Assistant Manager and QA Agent, open the agent_file_report tab
       navigate('/dashboard?tab=agent_file_report');
       setIsMobileMenuOpen(false);
       return;
     }
     if (view === 'QC_REPORT_OVERVIEW') {
-      console.log('🚀 [Header goTo] Navigating to QC Report Overview');
       // For Admin, Super Admin, PM, and Assistant Manager
       navigate('/dashboard?tab=qc_report_overview');
       setIsMobileMenuOpen(false);
       return;
     }
     if (view === 'QA_AGENT_AUDIT') {
-      console.log('🚀 [Header goTo] Navigating to QA Agent Audit');
       // For Admin, Super Admin, PM, and Assistant Manager
       navigate('/dashboard?tab=qa_agent_audit');
       setIsMobileMenuOpen(false);
@@ -154,7 +145,6 @@ const Header = ({
     
     // Handle Manage tab for Assistant Managers - route to /dashboard with tab=manage
     if (view === ViewState.ADMIN_PANEL && roleId === 4) {
-      console.log('🚀 [Header goTo] Navigating Assistant Manager to /dashboard with tab=manage');
       navigate('/dashboard?tab=manage');
       setIsMobileMenuOpen(false);
       return;
@@ -163,16 +153,13 @@ const Header = ({
     // For agents (role_id 6 or role includes 'AGENT')
     if (roleId === 6 || role.includes('AGENT')) {
       if (view === ViewState.ENTRY || view === 'ENTRY') {
-        console.log('🚀 [Header goTo] Navigating agent to /agent');
         navigate("/agent");
       } else if (view === ViewState.DASHBOARD || view === 'DASHBOARD') {
-        console.log('🚀 [Header goTo] Navigating agent to /dashboard');
         navigate("/dashboard");
       } else if (view === 'billable_report') {
         // Set the billable_report tab for agent
         navigate('/dashboard?tab=billable_report');
       } else if (view === 'AI_EVALUATION') {
-        console.log('🚀 [Header goTo] Navigating agent to AI Evaluation');
         navigate("/ai-evaluation");
         setIsMobileMenuOpen(false);
         return;
@@ -182,13 +169,11 @@ const Header = ({
         return;
       } else {
         const target = ROUTES[view] || "/agent";
-        console.log('🚀 [Header goTo] Navigating agent to:', target);
         navigate(target);
       }
     } else {
       // For admins and other roles
       const target = ROUTES[view] || "/dashboard";
-      console.log('🚀 [Header goTo] Navigating non-agent to:', target);
       navigate(target);
     }
     setIsMobileMenuOpen(false);
@@ -200,10 +185,6 @@ const Header = ({
 
   // Role-based tab mapping
   // Debug: Log currentUser to check available properties
-  useEffect(() => {
-    // eslint-disable-next-line
-    console.log('Header currentUser:', currentUser);
-  }, [currentUser]);
 
   const getNavItems = () => {
     const roleId = Number(currentUser?.role_id);
@@ -298,7 +279,6 @@ const Header = ({
 
   const navItems = getNavItems();
   // DEBUG: Log navItems and currentUser for troubleshooting tab visibility
-  console.log('Header navItems:', navItems, 'currentUser:', currentUser);
 
   // Helper function to check if a tab is active
   const isTabActive = (view) => {
