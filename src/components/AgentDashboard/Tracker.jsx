@@ -1,3 +1,18 @@
+// Filter backend error messages for user-friendly frontend display
+function filterApiErrorMessage(msg) {
+  if (!msg) return "Something went wrong. Please try again.";
+  const lower = msg.toLowerCase();
+  if (lower.includes("file") && lower.includes("type")) return "Uploaded file type is not allowed. Only Excel files are accepted.";
+  if (lower.includes("file") && lower.includes("size")) return "Uploaded file is too large. Max allowed size is 10MB.";
+  if (lower.includes("required")) return "Some required fields are missing. Please check your input.";
+  if (lower.includes("duplicate")) return "Duplicate entry detected. Please check your data.";
+  if (lower.includes("validation")) return "Some fields failed validation. Please review your input.";
+  if (lower.includes("excel")) return "There was a problem processing your Excel file. Please check the format.";
+  if (lower.includes("not authorized") || lower.includes("unauthorized")) return "You are not authorized to perform this action.";
+  if (lower.includes("timeout")) return "The request timed out. Please try again later.";
+  // Default: show a generic error but append the backend reason in parentheses
+  return `Action failed. (${msg})`;
+}
 import React, { useEffect, useState, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import { Download, Trash2, RotateCcw, RefreshCw, Copy, ChevronDown, Clock, Info } from "lucide-react";
@@ -540,7 +555,23 @@ const Tracker = ({ embedded = false }) => {
   const handleFileChange = async (e) => {
     const fileObj = e.target.files[0];
     if (!fileObj) return;
-    
+    // Only allow Excel files (xlsx, xls)
+    const allowedTypes = [
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel"
+    ];
+    const allowedExtensions = [".xlsx", ".xls"];
+    const fileName = fileObj.name.toLowerCase();
+    const isExcel = allowedTypes.includes(fileObj.type) || allowedExtensions.some(ext => fileName.endsWith(ext));
+    if (!isExcel) {
+      setFile(null);
+      setFilePreview(null);
+      setFileBase64(null);
+      setFileError("Only Excel files (.xlsx, .xls) are allowed.");
+      toast.error("Only Excel files (.xlsx, .xls) are allowed.", { duration: 4000 });
+      e.target.value = null;
+      return;
+    }
     const maxSize = 10 * 1024 * 1024; // 10MB in bytes
     if (fileObj.size > maxSize) {
       setFileError("File size must not exceed 10MB");
@@ -551,17 +582,14 @@ const Tracker = ({ embedded = false }) => {
       e.target.value = null;
       return;
     }
-    
     setFileError("");
     log('[Tracker] File selected:', fileObj.name);
     setFile(fileObj);
     setFilePreview(URL.createObjectURL(fileObj));
-    
     try {
       const base64 = await fileToBase64(fileObj);
       setFileBase64(base64);
       log('[Tracker] File converted to base64');
-      
       // Start upload progress simulation
       simulateUploadProgress();
     } catch (error) {
@@ -584,6 +612,7 @@ const Tracker = ({ embedded = false }) => {
     else if (baseTarget && Number(productionTarget) > (Number(baseTarget) * 2)) {
       newErrors.productionTarget = `Production cannot exceed double the Base Target (Max: ${Number(baseTarget) * 2})`;
     }
+    if (fileError) newErrors.file = fileError;
     return newErrors;
   };
 
@@ -758,7 +787,8 @@ const Tracker = ({ embedded = false }) => {
         }
       } catch (err) {
         logError('[Tracker] Error submitting tracker:', err);
-        toast.error(err?.response?.data?.message || err?.message || "Failed to add tracker.");
+        const backendMsg = err?.response?.data?.message || err?.message || "Failed to add tracker.";
+        toast.error(filterApiErrorMessage(backendMsg));
       } finally {
         setSubmitting(false);
       }
@@ -1908,14 +1938,14 @@ const Tracker = ({ embedded = false }) => {
                               <>Click to upload <span className="text-blue-600">or drag and drop</span></>
                             )}
                           </p>
-                          <p className="text-xs text-slate-500 mt-0.5">Supported formats: JPG, PNG, PDF, DOC, XLS, CSV • Max 10MB</p>
+                          <p className="text-xs text-slate-500 mt-0.5">Supported formats: <span className="font-semibold text-blue-700">Excel (.xlsx, .xls)</span> • Max 10MB</p>
                         </div>
                       </div>
                     )}
                     <input
                       id="modal-file-upload"
                       type="file"
-                      accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx,.csv"
+                      accept=".xlsx,.xls"
                       onChange={handleFileChange}
                       className="hidden"
                       disabled={isUploading}
