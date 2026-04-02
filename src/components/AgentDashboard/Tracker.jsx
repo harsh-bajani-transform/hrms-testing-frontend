@@ -84,6 +84,7 @@ const Tracker = ({ embedded = false }) => {
   // Validation requirements based on project configuration
   const [requiresAIValidation, setRequiresAIValidation] = useState(false);
   const [requiresDuplicateCheck, setRequiresDuplicateCheck] = useState(false);
+  const [isDuplicateCheckDisabled, setIsDuplicateCheckDisabled] = useState(false);
 
   // Sync geminiApiKey with sessionStorage
   useEffect(() => {
@@ -222,6 +223,7 @@ const Tracker = ({ embedded = false }) => {
     setDuplicateCheckSuccess(null);
     setDuplicateCheckError("");
     setDuplicateCheckResult(null);
+    setIsDuplicateCheckDisabled(false);
     
     // Reset validation states
     setErrors({});
@@ -671,7 +673,9 @@ const Tracker = ({ embedded = false }) => {
           return;
         }
       }
-      if (requiresDuplicateCheck && file) {
+      
+      // Check if Duplicate Check is required and completed successfully
+      if (requiresDuplicateCheck && file && !isDuplicateCheckDisabled) {
         if (!duplicateCheckComplete) {
           toast.error("Please complete Duplicate Check before submitting", { duration: 4000 });
           return;
@@ -687,68 +691,81 @@ const Tracker = ({ embedded = false }) => {
         setSubmitting(false);
         return;
       }
-      // If file is uploaded, run process-excel first
-      if (file) {
-        try {
-          log('[Tracker] Running process-excel for file processing');
-          const processFormData = new FormData();
-          processFormData.append('file', file);
-          processFormData.append('user_id', user?.user_id);
-          processFormData.append('project_id', Number(selectedProject));
-          processFormData.append('task_id', Number(selectedTask));
-          if (geminiApiKey) processFormData.append('gemini_api_key', geminiApiKey);
-          const processRes = await nodeApi.post('/tracker/process-excel', processFormData, {
-            headers: {
-              'Content-Type': 'multipart/form-data'
-            },
-            timeout: 300000 // 5 minutes for processing
-          });
-          log('[Tracker] Process-excel response:', processRes.data);
-          const isSuccess = 
-            processRes.status === 200 || 
-            processRes.status === 201 ||
-            processRes.data?.success === true || 
-            processRes.data?.success === 1 ||
-            processRes.data?.status === 'success' ||
-            processRes.data?.status === 200 ||
-            (typeof processRes.data?.message === 'string' && processRes.data?.message?.toLowerCase().includes('success'));
-          if (!isSuccess) {
-            logError('[Tracker] File processing failed:', processRes.data);
-            toast.error("You Have Either Duplicate File/Record. Please check your Excel file and try again.");
-            setSubmitting(false);
-            return;
-          }
-          toast.success("File processed successfully!");
-        } catch (processError) {
-          logError('[Tracker] Error in process-excel:', processError);
-          toast.error("You Have Either Duplicate File/Record. Please check your Excel file and try again.");
-          setSubmitting(false);
-          return;
-        }
+      
+      const formData = new FormData();
+      formData.append('project_id', Number(selectedProject));
+      formData.append('task_id', Number(selectedTask));
+      formData.append('shift', shiftType);
+      console.log('[Tracker] Submitting shift value:', shiftType);
+      formData.append('user_id', user?.user_id);
+      formData.append('production', Number(productionTarget));
+      formData.append('tenure_target', Number(baseTarget));
+      
+      if (notes && notes.trim()) {
+        formData.append('tracker_note', notes.trim());
       }
-      // Now add the tracker
+      
+      if (file) {
+        formData.append('tracker_file', file);
+      }
+      
       try {
         log('[Tracker] Submitting tracker with FormData');
-        const formData = new FormData();
-        formData.append('project_id', Number(selectedProject));
-        formData.append('task_id', Number(selectedTask));
-        formData.append('shift', shiftType);
-        formData.append('user_id', user?.user_id);
-        formData.append('production', Number(productionTarget));
-        formData.append('tenure_target', Number(baseTarget));
-        if (notes && notes.trim()) {
-          formData.append('tracker_note', notes.trim());
-        }
-        if (file) {
-          formData.append('tracker_file', file);
-        }
+        
+        // First, submit the tracker
         const res = await api.post("/tracker/add", formData, {
           headers: {
             'Content-Type': 'multipart/form-data'
           }
         });
+        
         if (res.data?.status === 201 || res.status === 201 || res.status === 200) {
           log('[Tracker] Tracker added successfully');
+          
+          // If file is uploaded, run process-excel to create hashes
+          if (file) {
+            try {
+              log('[Tracker] Running process-excel for file processing');
+              const processFormData = new FormData();
+              processFormData.append('file', file);
+              processFormData.append('user_id', user?.user_id);
+              processFormData.append('project_id', Number(selectedProject));
+              processFormData.append('task_id', Number(selectedTask));
+              processFormData.append('duplicate_check', !isDuplicateCheckDisabled);
+              if (geminiApiKey) processFormData.append('gemini_api_key', geminiApiKey);
+              
+              const processRes = await nodeApi.post('/tracker/process-excel', processFormData, {
+                headers: {
+                  'Content-Type': 'multipart/form-data'
+                },
+                timeout: 300000 // 5 minutes for processing
+              });
+              
+              log('[Tracker] Process-excel response:', processRes.data);
+              
+              // More lenient success check - accept various success indicators
+              const isSuccess = 
+                processRes.status === 200 || 
+                processRes.status === 201 ||
+                processRes.data?.success === true || 
+                processRes.data?.success === 1 ||
+                processRes.data?.status === 'success' ||
+                processRes.data?.status === 200 ||
+                processRes.data?.message?.toLowerCase().includes('success');
+              
+              if (isSuccess) {
+                log('[Tracker] File processed successfully, hashes created');
+                toast.success("File processed and hashes created successfully!");
+              } else {
+                logError('[Tracker] File processing failed:', processRes.data);
+                toast.error("Tracker added but file processing failed. Contact support.");
+              }
+            } catch (processError) {
+              logError('[Tracker] Error in process-excel:', processError);
+              toast.error("Tracker added but file processing failed. Contact support.");
+            }
+          }
+          
           toast.success("Tracker added successfully!");
           resetModalForm();
           setShowModal(false);
@@ -2013,6 +2030,23 @@ const Tracker = ({ embedded = false }) => {
                           )}
                         </div>
                         )}
+
+                        {/* Duplicate Check Toggle */}
+                        <div className="md:col-span-2 flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200 mt-2">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              className="sr-only peer" 
+                              checked={isDuplicateCheckDisabled}
+                              onChange={(e) => setIsDuplicateCheckDisabled(e.target.checked)}
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                            <span className="ml-3 text-sm font-bold text-slate-700">Disable Duplicate Check</span>
+                          </label>
+                          <div className="flex-1 text-xs text-slate-500 italic">
+                            (If enabled, file will be processed even if duplicate records are found)
+                          </div>
+                        </div>
 
                         {/* Duplicate Check Button - only show if required */}
                         {requiresDuplicateCheck && (
