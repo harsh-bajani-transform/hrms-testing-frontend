@@ -84,6 +84,7 @@ const Tracker = ({ embedded = false }) => {
   // Validation requirements based on project configuration
   const [requiresAIValidation, setRequiresAIValidation] = useState(false);
   const [requiresDuplicateCheck, setRequiresDuplicateCheck] = useState(false);
+  const [isDuplicateCheckDisabled, setIsDuplicateCheckDisabled] = useState(false);
 
   // Sync geminiApiKey with sessionStorage
   useEffect(() => {
@@ -222,6 +223,7 @@ const Tracker = ({ embedded = false }) => {
     setDuplicateCheckSuccess(null);
     setDuplicateCheckError("");
     setDuplicateCheckResult(null);
+    setIsDuplicateCheckDisabled(false);
     
     // Reset validation states
     setErrors({});
@@ -681,7 +683,7 @@ const Tracker = ({ embedded = false }) => {
       }
       
       // Check if Duplicate Check is required and completed successfully
-      if (requiresDuplicateCheck && file) {
+      if (requiresDuplicateCheck && file && !isDuplicateCheckDisabled) {
         if (!duplicateCheckComplete) {
           toast.error("Please complete Duplicate Check before submitting", { duration: 4000 });
           return;
@@ -739,6 +741,7 @@ const Tracker = ({ embedded = false }) => {
               processFormData.append('user_id', user?.user_id);
               processFormData.append('project_id', Number(selectedProject));
               processFormData.append('task_id', Number(selectedTask));
+              processFormData.append('duplicate_check', !isDuplicateCheckDisabled);
               if (geminiApiKey) processFormData.append('gemini_api_key', geminiApiKey);
               
               const processRes = await nodeApi.post('/tracker/process-excel', processFormData, {
@@ -2041,6 +2044,23 @@ const Tracker = ({ embedded = false }) => {
                           )}
                         </div>
                         )}
+
+                        {/* Duplicate Check Toggle */}
+                        <div className="md:col-span-2 flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200 mt-2">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              className="sr-only peer" 
+                              checked={isDuplicateCheckDisabled}
+                              onChange={(e) => setIsDuplicateCheckDisabled(e.target.checked)}
+                            />
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                            <span className="ml-3 text-sm font-bold text-slate-700">Disable Duplicate Check</span>
+                          </label>
+                          <div className="flex-1 text-xs text-slate-500 italic">
+                            (If enabled, file will be processed even if duplicate records are found)
+                          </div>
+                        </div>
 
                         {/* Duplicate Check Button - only show if required */}
                         {requiresDuplicateCheck && (
