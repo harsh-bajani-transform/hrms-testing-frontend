@@ -220,55 +220,55 @@ const ManagerQCReportsOverview = () => {
 
     if (status === 'regular') {
       return (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-green-100 text-green-700 border-2 border-green-300">
-          <CheckCircle2 className="w-3.5 h-3.5" />
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">
+          <CheckCircle2 className="w-3 h-3" />
           Passed
         </span>
       );
     } else if (status === 'correction') {
       return (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700 border-2 border-yellow-300">
-          <AlertCircle className="w-3.5 h-3.5" />
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-yellow-100 text-yellow-700">
+          <AlertCircle className="w-3 h-3" />
           Correction
         </span>
       );
     } else if (status === 'rework') {
       return (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-red-100 text-red-700 border-2 border-red-300">
-          <XCircle className="w-3.5 h-3.5" />
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">
+          <XCircle className="w-3 h-3" />
           Rework
         </span>
       );
     }
-    return null;
+    return <span className="text-xs text-slate-400">—</span>;
   };
 
   const getQCStatusBadge = (qcStatus) => {
     if (qcStatus === 'completed') {
       return (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700 border-2 border-blue-300">
-          <CheckCircle2 className="w-3.5 h-3.5" />
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">
+          <CheckCircle2 className="w-3 h-3" />
           Completed
         </span>
       );
     } else if (qcStatus === 'correction') {
       return (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700 border-2 border-yellow-300">
-          <AlertCircle className="w-3.5 h-3.5" />
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-yellow-100 text-yellow-700">
+          <AlertCircle className="w-3 h-3" />
           Correction
         </span>
       );
     } else if (qcStatus === 'rework') {
       return (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-red-100 text-red-700 border-2 border-red-300">
-          <XCircle className="w-3.5 h-3.5" />
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">
+          <XCircle className="w-3 h-3" />
           Rework
         </span>
       );
     } else if (qcStatus === 'pending') {
       return (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-orange-100 text-orange-700 border-2 border-orange-300">
-          <Clock className="w-3.5 h-3.5" />
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700">
+          <Clock className="w-3 h-3" />
           Pending
         </span>
       );
@@ -277,16 +277,33 @@ const ManagerQCReportsOverview = () => {
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
+    if (!dateString) return { date: 'N/A', time: '' };
+    // Parse the date string format: "Fri, 03 Apr 2026 15:26:48 GMT"
+    // Extract date and time directly without timezone conversion
+    const match = dateString.match(/(\d{2})\s+(\w{3})\s+(\d{4})\s+(\d{2}):(\d{2})/);
+    if (match) {
+      const [, day, month, year, hours, minutes] = match;
+      const hour = parseInt(hours, 10);
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const hour12 = hour % 12 || 12;
+      return {
+        date: `${parseInt(day, 10)}/${month}/${year}`,
+        time: `${hour12}:${minutes} ${ampm}`
+      };
+    }
+    // Fallback for unexpected format - use UTC to avoid timezone conversion
     const date = new Date(dateString);
-    return date.toLocaleString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
+    const day = date.getUTCDate();
+    const month = date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' });
+    const year = date.getUTCFullYear();
+    const hours = date.getUTCHours();
+    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const hour12 = hours % 12 || 12;
+    return {
+      date: `${day}/${month}/${year}`,
+      time: `${hour12}:${minutes} ${ampm}`
+    };
   };
 
   const parseErrors = (errorString) => {
@@ -500,7 +517,6 @@ const ManagerQCReportsOverview = () => {
                   <th className="px-4 py-4 text-center text-xs font-bold text-white uppercase">QC Status</th>
                   <th className="px-4 py-4 text-center text-xs font-bold text-white uppercase">Status</th>
                   <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase">Submission Date</th>
-                  <th className="px-4 py-4 text-center text-xs font-bold text-white uppercase">Records</th>
                   <th className="px-4 py-4 text-center text-xs font-bold text-white uppercase">File</th>
                   <th className="px-4 py-4 text-center text-xs font-bold text-white uppercase">History</th>
                 </tr>
@@ -508,7 +524,7 @@ const ManagerQCReportsOverview = () => {
               <tbody className="divide-y divide-slate-200">
                 {filteredRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={isAssistantManager ? "10" : "11"} className="px-4 py-12 text-center text-slate-500">
+                    <td colSpan={isAssistantManager ? "9" : "10"} className="px-4 py-12 text-center text-slate-500">
                       <FileCheck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                       <p className="font-bold">No QC records found</p>
                       <p className="text-sm">Try adjusting your filters</p>
@@ -545,12 +561,12 @@ const ManagerQCReportsOverview = () => {
                           </div>
                         </td>
                         <td className="px-4 py-4 text-center">
-                          <span className={`inline-flex items-center justify-center px-3 py-1.5 rounded-lg font-bold text-sm ${
+                          <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-xs font-semibold ${
                             record.qc_score === 100
-                              ? 'bg-green-100 text-green-700 border-2 border-green-300'
+                              ? 'bg-green-100 text-green-700'
                               : record.qc_score >= 98
-                              ? 'bg-yellow-100 text-yellow-700 border-2 border-yellow-300'
-                              : 'bg-red-100 text-red-700 border-2 border-red-300'
+                              ? 'bg-yellow-100 text-yellow-700'
+                              : 'bg-red-100 text-red-700'
                           }`}>
                             {record.qc_score}%
                           </span>
@@ -562,22 +578,18 @@ const ManagerQCReportsOverview = () => {
                           {getStatusBadge(record)}
                         </td>
                         <td className="px-4 py-4">
-                          <div className="flex items-center gap-2 text-xs text-slate-600">
-                            <Calendar className="w-3.5 h-3.5" />
-                            <span>{formatDate(record.date_of_file_submission)}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 text-center">
-                          <div className="text-xs">
-                            <div className="flex items-center justify-center gap-1">
-                              <span className="font-medium text-slate-600">Total:</span>
-                              <span className="font-bold text-slate-800">{record.file_record_count}</span>
-                            </div>
-                            <div className="flex items-center justify-center gap-1">
-                              <span className="font-medium text-slate-600">QC:</span>
-                              <span className="font-bold text-blue-600">{record.qc_generated_count}</span>
-                            </div>
-                          </div>
+                          {(() => {
+                            const dt = formatDate(record.date_of_file_submission);
+                            return (
+                              <div className="flex items-center gap-2 text-xs text-slate-600">
+                                <Calendar className="w-3.5 h-3.5" />
+                                <div>
+                                  <p className="font-medium">{dt.date}</p>
+                                  {dt.time && <p className="text-slate-500">{dt.time}</p>}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="px-4 py-4 text-center">
                           {record.whole_file_path ? (
@@ -606,7 +618,7 @@ const ManagerQCReportsOverview = () => {
                       </tr>
                       {selectedRecord?.id === record.id && (
                         <tr>
-                          <td colSpan={isAssistantManager ? "10" : "11"} className="p-0">
+                          <td colSpan={isAssistantManager ? "9" : "10"} className="p-0">
                             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-t-2 border-blue-200">
                               <div className="p-6">
                                 <h4 className="text-sm font-bold text-indigo-900 mb-4 flex items-center gap-2">
@@ -646,7 +658,15 @@ const ManagerQCReportsOverview = () => {
                                                   <span className="font-bold text-red-700">{rework.rework_count || idx + 1}</span>
                                                 </td>
                                                 <td className="px-3 py-3 text-slate-700">
-                                                  {formatDate(rework.updated_at)}
+                                                  {(() => {
+                                                    const dt = formatDate(rework.updated_at);
+                                                    return (
+                                                      <div>
+                                                        <p className="font-medium">{dt.date}</p>
+                                                        {dt.time && <p className="text-xs text-slate-500">{dt.time}</p>}
+                                                      </div>
+                                                    );
+                                                  })()}
                                                 </td>
                                                 <td className="px-3 py-3 text-center">
                                                   <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-orange-100 text-orange-700 font-medium text-xs border border-orange-200">
@@ -733,7 +753,15 @@ const ManagerQCReportsOverview = () => {
                                                   <span className="font-bold text-yellow-700">{correction.correction_count || idx + 1}</span>
                                                 </td>
                                                 <td className="px-3 py-3 text-slate-700">
-                                                  {formatDate(correction.updated_at)}
+                                                  {(() => {
+                                                    const dt = formatDate(correction.updated_at);
+                                                    return (
+                                                      <div>
+                                                        <p className="font-medium">{dt.date}</p>
+                                                        {dt.time && <p className="text-xs text-slate-500">{dt.time}</p>}
+                                                      </div>
+                                                    );
+                                                  })()}
                                                 </td>
                                                 <td className="px-3 py-3 text-center">
                                                   <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-orange-100 text-orange-700 font-medium text-xs border border-orange-200">

@@ -74,16 +74,33 @@ const AgentQCReportPage = () => {
   };
 
   const formatDateTime = (dateString) => {
-    if (!dateString) return '—';
+    if (!dateString) return { date: '—', time: '' };
+    // Parse the date string format: "Fri, 03 Apr 2026 15:26:48 GMT"
+    // Extract date and time directly without timezone conversion
+    const match = dateString.match(/(\d{2})\s+(\w{3})\s+(\d{4})\s+(\d{2}):(\d{2})/);
+    if (match) {
+      const [, day, month, year, hours, minutes] = match;
+      const hour = parseInt(hours, 10);
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const hour12 = hour % 12 || 12;
+      return {
+        date: `${parseInt(day, 10)}/${month}/${year}`,
+        time: `${hour12}:${minutes} ${ampm}`
+      };
+    }
+    // Fallback for unexpected format - use UTC to avoid timezone conversion
     const date = new Date(dateString);
-    return date.toLocaleString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
+    const day = date.getUTCDate();
+    const month = date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' });
+    const year = date.getUTCFullYear();
+    const hours = date.getUTCHours();
+    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const hour12 = hours % 12 || 12;
+    return {
+      date: `${day}/${month}/${year}`,
+      time: `${hour12}:${minutes} ${ampm}`
+    };
   };
 
   const parseErrors = (errors) => {
@@ -430,7 +447,17 @@ const AgentQCReportPage = () => {
                 return (
                   <React.Fragment key={record.id}>
                     <tr className="hover:bg-slate-50">
-                      <td className="px-4 py-3 text-slate-600">{formatDateTime(record.date_of_file_submission)}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {(() => {
+                          const dt = formatDateTime(record.date_of_file_submission);
+                          return (
+                            <div>
+                              <p className="font-medium">{dt.date}</p>
+                              {dt.time && <p className="text-xs text-slate-500">{dt.time}</p>}
+                            </div>
+                          );
+                        })()}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="font-medium text-slate-800">{record.project_name}</div>
                         <div className="text-xs text-slate-500">{record.task_name}</div>
@@ -438,7 +465,7 @@ const AgentQCReportPage = () => {
                       <td className={`px-4 py-3 text-center ${getScoreClass(record.qc_score)}`}>
                         {record.qc_score !== null && record.qc_score !== undefined ? `${record.qc_score}%` : '—'}
                       </td>
-                      <td className="px-4 py-3 text-center">{statusInfo.badge}</td>
+                      <td className="px-4 py-3 text-center">{getStatusBadge(record.status)}</td>
                       <td className="px-4 py-3 text-center">{getQCStatusBadge(record.qc_status)}</td>
                       <td className="px-4 py-3 text-center">
                         {errors.length > 0 ? (
@@ -571,7 +598,17 @@ const AgentQCReportPage = () => {
                                           return (
                                             <tr key={idx} className="hover:bg-slate-50">
                                               <td className="px-3 py-2">{getTypeBadge(item.type)}</td>
-                                              <td className="px-3 py-2 text-slate-600">{formatDateTime(item.updated_at)}</td>
+                                              <td className="px-3 py-2 text-slate-600">
+                                                {(() => {
+                                                  const dt = formatDateTime(item.updated_at);
+                                                  return (
+                                                    <div>
+                                                      <p className="font-medium">{dt.date}</p>
+                                                      {dt.time && <p className="text-xs text-slate-500">{dt.time}</p>}
+                                                    </div>
+                                                  );
+                                                })()}
+                                              </td>
                                               <td className="px-3 py-2 text-center">
                                                 <span className="px-2 py-1 rounded text-xs font-bold bg-blue-100 text-blue-700">
                                                   #{item.attempt}
