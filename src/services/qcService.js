@@ -84,9 +84,15 @@ export const fetchQCAFDList = async () => {
  * @param {number} sampling_percentage - Sampling percentage (optional, defaults to 10 if not provided)
  * @returns {Promise} Sample data response with file URL and records
  */
-export const generateQCSample = async (tracker_id, logged_in_user_id, sampling_percentage = 10) => {
+export const generateQCSample = async (
+  tracker_id,
+  logged_in_user_id,
+  sampling_percentage = 10,
+) => {
   try {
-    log(`[QC Service] Generating sample for tracker ${tracker_id} with sampling percentage ${sampling_percentage}%`);
+    log(
+      `[QC Service] Generating sample for tracker ${tracker_id} with sampling percentage ${sampling_percentage}%`,
+    );
 
     const response = await nodeApi.post("/qc-records/generate-sample", {
       tracker_id,
@@ -95,12 +101,16 @@ export const generateQCSample = async (tracker_id, logged_in_user_id, sampling_p
     });
 
     log(`[QC Service] Sample generated successfully:`, response.data);
-    log(`[QC Service] Full response structure:`, JSON.stringify(response.data, null, 2));
+    log(
+      `[QC Service] Full response structure:`,
+      JSON.stringify(response.data, null, 2),
+    );
     log(`[QC Service] File path check:`, {
-      'response.data.file_path': response.data?.file_path,
-      'response.data["10%_file_path"]': response.data?.['10%_file_path'],
-      'response.data.data.file_path': response.data?.data?.file_path,
-      'response.data.data["10%_file_path"]': response.data?.data?.['10%_file_path']
+      "response.data.file_path": response.data?.file_path,
+      'response.data["10%_file_path"]': response.data?.["10%_file_path"],
+      "response.data.data.file_path": response.data?.data?.file_path,
+      'response.data.data["10%_file_path"]':
+        response.data?.data?.["10%_file_path"],
     });
     return response.data;
   } catch (error) {
@@ -110,13 +120,13 @@ export const generateQCSample = async (tracker_id, logged_in_user_id, sampling_p
 };
 
 /**
- * Save QC Form Record
- * @param {Object} payload - Complete QC form data payload
- * @param {number} payload.logged_in_user_id - Logged in user ID (for authentication)
- * @param {number} payload.tracker_id - Tracker ID reference
- * @param {number|null} payload.assistant_manager_id - Assistant Manager ID
- * @param {number} payload.qa_user_id - QA User ID (who performed the QC)
- * @param {number} payload.agent_id - Agent User ID (whose work is being checked)
+ * Save QC Record - Routes to appropriate endpoint based on status
+ * @param {Object} payload - QC form data
+ * @param {number} payload.logged_in_user_id - Logged in user ID
+ * @param {number} payload.tracker_id - Tracker ID
+ * @param {number} payload.ass_manager_id - Assistant Manager ID
+ * @param {number} payload.qc_user_id - QC User ID
+ * @param {number} payload.agent_user_id - Agent User ID
  * @param {number} payload.project_id - Project ID
  * @param {number} payload.task_id - Task ID
  * @param {string} payload.whole_file_path - File path/URL of the full tracker
@@ -134,7 +144,7 @@ export const generateQCSample = async (tracker_id, logged_in_user_id, sampling_p
 export const saveQCRecord = async (payload) => {
   try {
     log(`[QC Service] Saving QC record for tracker ${payload.tracker_id}`);
-    console.log('[QC Service] Payload structure:', {
+    console.log("[QC Service] Payload structure:", {
       logged_in_user_id: payload.logged_in_user_id,
       tracker_id: payload.tracker_id,
       ass_manager_id: payload.ass_manager_id,
@@ -150,19 +160,40 @@ export const saveQCRecord = async (payload) => {
       qc_file_records: payload.qc_file_records,
       error_score: payload.error_score,
       error_list_length: payload.error_list?.length || 0,
-      has_comments: !!payload.comments
+      has_comments: !!payload.comments,
     });
 
-    const response = await nodeApi.post("/qc-records/save", payload);
+    // Route to appropriate endpoint based on status
+    let endpoint;
+    switch (payload.status) {
+      case "regular":
+        endpoint = "/qc-regular/save";
+        break;
+      case "correction":
+        endpoint = "/qc-correction/save";
+        break;
+      case "rework":
+        endpoint = "/qc-rework/save";
+        break;
+      default:
+        throw new Error(
+          `Invalid status: ${payload.status}. Must be 'regular', 'correction', or 'rework'.`,
+        );
+    }
 
-    log(`[QC Service] QC record saved successfully:`, response.data);
+    const response = await nodeApi.post(endpoint, payload);
+
+    log(
+      `[QC Service] QC record saved successfully via ${endpoint}:`,
+      response.data,
+    );
     return response.data;
   } catch (error) {
     logError("[QC Service] Error saving QC record:", error);
     console.error("[QC Service] Error details:", {
       status: error.response?.status,
       message: error.response?.data?.message || error.message,
-      data: error.response?.data
+      data: error.response?.data,
     });
     throw error;
   }
@@ -234,7 +265,9 @@ export const getQAAgentQCRecords = async (qa_user_id) => {
 export const getPendingReviews = async (qa_user_id) => {
   try {
     log(`[QC Service] Fetching pending reviews for QA agent ${qa_user_id}`);
-    const response = await nodeApi.get(`/qc-records/pending-review/${qa_user_id}`);
+    const response = await nodeApi.get(
+      `/qc-records/pending-review/${qa_user_id}`,
+    );
     log(`[QC Service] Pending reviews fetched successfully`);
     return response.data;
   } catch (error) {
@@ -251,10 +284,10 @@ export const getPendingReviews = async (qa_user_id) => {
 export const uploadReworkFile = async (formData) => {
   try {
     log(`[QC Service] Uploading rework file`);
-    const response = await nodeApi.post('/qc-records/upload-rework', formData, {
+    const response = await nodeApi.post("/qc-records/upload-rework", formData, {
       headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+        "Content-Type": "multipart/form-data",
+      },
     });
     log(`[QC Service] Rework file uploaded successfully`);
     return response.data;
@@ -272,11 +305,15 @@ export const uploadReworkFile = async (formData) => {
 export const uploadCorrectionFile = async (formData) => {
   try {
     log(`[QC Service] Uploading correction file`);
-    const response = await nodeApi.post('/qc-records/upload-correction', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    });
+    const response = await nodeApi.post(
+      "/qc-records/upload-correction",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      },
+    );
     log(`[QC Service] Correction file uploaded successfully`);
     return response.data;
   } catch (error) {
@@ -293,7 +330,7 @@ export const uploadCorrectionFile = async (formData) => {
 export const getAllQCRecords = async (filters = {}) => {
   try {
     log(`[QC Service] Fetching all QC records with filters:`, filters);
-    const response = await nodeApi.get('/qc-records/all', { params: filters });
+    const response = await nodeApi.get("/qc-records/all", { params: filters });
     log(`[QC Service] All QC records fetched successfully`);
     return response.data;
   } catch (error) {
@@ -309,7 +346,7 @@ export const getAllQCRecords = async (filters = {}) => {
 export const getQCStatistics = async () => {
   try {
     log(`[QC Service] Fetching QC statistics`);
-    const response = await nodeApi.get('/qc-records/statistics');
+    const response = await nodeApi.get("/qc-records/statistics");
     log(`[QC Service] QC statistics fetched successfully`);
     return response.data;
   } catch (error) {
@@ -326,7 +363,7 @@ export const getQCStatistics = async () => {
 export const submitReworkQC = async (payload) => {
   try {
     log(`[QC Service] Submitting QC for rework file`);
-    const response = await nodeApi.post('/qc-records/review-rework', payload);
+    const response = await nodeApi.post("/qc-records/review-rework", payload);
     log(`[QC Service] Rework QC submitted successfully`);
     return response.data;
   } catch (error) {
@@ -343,7 +380,10 @@ export const submitReworkQC = async (payload) => {
 export const submitCorrectionQC = async (payload) => {
   try {
     log(`[QC Service] Submitting QC for correction file`);
-    const response = await nodeApi.post('/qc-records/review-correction', payload);
+    const response = await nodeApi.post(
+      "/qc-records/review-correction",
+      payload,
+    );
     log(`[QC Service] Correction QC submitted successfully`);
     return response.data;
   } catch (error) {
