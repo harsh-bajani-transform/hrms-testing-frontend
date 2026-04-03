@@ -807,7 +807,21 @@ const QAAgentList = () => {
       console.log('Payload:', payload);
       console.groupEnd();
 
-      const response = await nodeApi.post('/qc-records/save', payload);
+      // Determine which endpoint to call based on the tracker type and status
+      let endpoint = '/qc-records/save'; // default fallback
+      
+      // Check if this is a correction tracker (has correction history)
+      if (tracker.correction_cycle_count > 0 && tracker.correction_cycle_count !== null) {
+        endpoint = '/qc-correction/save';
+      } else if (tracker.rework_cycle_count > 0 && tracker.rework_cycle_count !== null) {
+        endpoint = '/qc-rework/save';
+      } else {
+        endpoint = '/qc-regular/save';
+      }
+
+      console.log(`[QAAgentList] Using endpoint: ${endpoint}`);
+
+      const response = await nodeApi.post(endpoint, payload);
 
       toast.dismiss(loadingToast);
       
