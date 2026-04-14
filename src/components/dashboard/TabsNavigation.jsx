@@ -34,7 +34,7 @@ const TabsNavigation = ({
     ...(isProjectManager || isAssistantManager || isAdmin || isSuperAdmin ? [
       { id: 'user_monthly_report', label: 'User Monthly Report', icon: Users, visible: true, disabled: false },
       { id: 'project_monthly_report', label: 'Project Monthly Report', icon: FolderKanban, visible: true, disabled: false },
-      { id: 'incentives', label: 'Agent Incentives', icon: DollarSign, visible: true, disabled: false },
+      { id: 'roster_report', label: 'Roster Report', icon: Users, visible: true, disabled: false },
       { id: 'mgmt_incentives', label: 'Management Incentives', icon: Gem, visible: true, disabled: false },
     ] : [
       { id: 'incentives', label: 'Agent Incentives', icon: DollarSign, visible: canViewIncentivesTab && !isQA, disabled: true },

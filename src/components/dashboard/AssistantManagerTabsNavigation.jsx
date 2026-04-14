@@ -1,12 +1,13 @@
 import React from 'react';
 import UserMonthlyReport from './UserMonthlyReport';
 import ProjectMonthlyReport from './ProjectMonthlyReport';
+import ManagerRosterRequests from '../../pages/ManagerRosterRequests';
 import {
   LayoutGrid,
   Briefcase,
   Users,
   FolderKanban,
-  DollarSign
+  FileText
 } from 'lucide-react';
 
 const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab }) => {
@@ -15,7 +16,7 @@ const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab }) => {
     { id: 'billable_report', label: 'Billable Report', icon: Briefcase },
     { id: 'user_monthly_report', label: 'User Monthly Goal', icon: Users },
     { id: 'project_monthly_report', label: 'Project Monthly Report', icon: FolderKanban },
-    { id: 'incentives', label: 'Agent Incentives', icon: DollarSign, disabled: true }
+    { id: 'roster_report', label: 'Roster Report', icon: FileText }
   ];
 
   return (
@@ -65,6 +66,12 @@ const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab }) => {
       {activeTab === 'project_monthly_report' && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <ProjectMonthlyReport />
+        </div>
+      )}
+      {/* Roster Report Tab */}
+      {activeTab === 'roster_report' && (
+        <div className="mt-6">
+          <ManagerRosterRequests />
         </div>
       )}
     </div>

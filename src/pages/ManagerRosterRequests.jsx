@@ -1,0 +1,373 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { ChevronLeft, ChevronRight, Search, CheckCircle, XCircle, Eye, Calendar, User, Clock, FileText } from 'lucide-react';
+import api from '../services/api';
+import { toast } from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
+
+const ManagerRosterRequests = () => {
+  const { user: authUser } = useAuth();
+  const [selectedMonth, setSelectedMonth] = useState(new Date());
+  const [filterStatus, setFilterStatus] = useState('pending');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [allRequests, setAllRequests] = useState({
+    pending: [],
+    approved: [],
+    rejected: []
+  });
+  const hasFetchedRef = useRef(false);
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+
+  // Define fetchRequests function
+  const fetchRequests = async (status, userData = null) => {
+    try {
+      setLoading(true);
+      const userDataToUse = userData || authUser;
+      const userId = userDataToUse?.user_id || userDataToUse?.id || 111;
+      const monthYear = format(selectedMonth, 'MMMyyyy'); // Format: Apr2026
+      
+      console.log('Calling roster/get_leave_history API...', { 
+        logged_in_user_id: userId, 
+        status: status, 
+        month_year: monthYear 
+      });
+
+      const response = await api.post('/roster/get_leave_history', {
+        logged_in_user_id: userId,
+        status: status,
+        month_year: monthYear
+      });
+
+      console.log('API Response:', response.data);
+      console.log('Response success:', response.data?.success);
+      console.log('Response data count:', response.data?.data?.length);
+
+      if (response.data && response.data.success) {
+        const data = response.data.data || [];
+        console.log('Data array length:', data.length);
+        
+        // Convert API response to internal format
+        const convertedRequests = data.map(item => ({
+          id: item.draft_id,
+          employee_name: item.user_name,
+          employee_id: item.user_id,
+          team_name: item.team?.team_name || 'No Team',
+          team_id: item.team?.team_id,
+          date: item.date,
+          change_type: item.leave_type || "Status Change",
+          change_details: item.changes?.to?.day_type || "Status Change",
+          requested_by: item.requested_by,
+          requested_date: item.requested_at,
+          status: item.status,
+          status_display: item.status_display,
+          is_planned: item.is_planned === "yes",
+          leave_type_id: item.leave_type_id
+        }));
+
+        console.log('Converted requests:', convertedRequests.length);
+
+        // Store data in allRequests based on status
+        setAllRequests(prev => ({
+          ...prev,
+          [status]: convertedRequests
+        }));
+        
+        // Don't set requests state here - let the sync useEffect handle it
+        
+        toast.success(`Loaded ${convertedRequests.length} ${status} requests`);
+      } else {
+        toast.error('Failed to load requests');
+        setAllRequests(prev => ({ ...prev, [status]: [] }));
+      }
+    } catch (error) {
+      console.error('Error fetching requests:', error);
+      console.error('Error response:', error.response?.data);
+      toast.error(error.response?.data?.message || 'Failed to load requests');
+      setAllRequests(prev => ({ ...prev, [status]: [] }));
+    } finally {
+      setLoading(false);
+    }
+  };                                                   
+
+  // Debug: Track allRequests changes
+  useEffect(() => {
+    console.log('allRequests updated:', allRequests);
+    console.log('Current filterStatus:', filterStatus);
+    console.log('Current tab data:', allRequests[filterStatus]);
+  }, [allRequests, filterStatus]);
+
+  // Initialize data - fetch all three statuses when authUser is available (only once)
+  useEffect(() => {
+    if (authUser && !hasFetchedRef.current) {
+      console.log('Auth user available:', authUser);
+      console.log('Fetching all three statuses...');
+      hasFetchedRef.current = true; // Set flag immediately before API calls
+      fetchRequests('pending', authUser);
+      fetchRequests('approved', authUser);
+      fetchRequests('rejected', authUser);
+    }
+  }, [authUser]);
+
+  const handleTabChange = (status) => {
+    setFilterStatus(status);
+    // Fetch data if not already cached
+    if (!allRequests[status] || allRequests[status].length === 0) {
+      fetchRequests(status, authUser);
+    }
+  };
+
+  const currentRequests = allRequests[filterStatus] || [];
+  const filteredRequests = currentRequests.filter(item =>
+    item.employee_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.team_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.requested_by.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Debug render values
+  console.log('Render - filterStatus:', filterStatus);
+  console.log('Render - currentRequests.length:', currentRequests.length);
+  console.log('Render - filteredRequests.length:', filteredRequests.length);
+  console.log('Render - loading:', loading);
+
+  const stats = {
+    pending: allRequests.pending.length,
+    approved: allRequests.approved.length,
+    rejected: allRequests.rejected.length
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-slate-800 mb-2">Roster Requests</h1>
+          <p className="text-slate-600">View and manage roster change requests</p>
+        </div>
+
+        {/* Controls */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            {/* Month Selector */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSelectedMonth(subMonths(selectedMonth, 1))}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <ChevronLeft className="w-5 h-5 text-slate-600" />
+              </button>
+              <div className="text-center min-w-[150px]">
+                <h3 className="text-lg font-semibold text-slate-800">
+                  {format(selectedMonth, 'MMMM yyyy')}
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedMonth(addMonths(selectedMonth, 1))}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <ChevronRight className="w-5 h-5 text-slate-600" />
+              </button>
+            </div>
+
+            {/* Status Filter */}
+            <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-1">
+              {['pending', 'approved', 'rejected'].map((status) => (
+                <button
+                  key={status}
+                  onClick={() => handleTabChange(status)}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${
+                    filterStatus === status
+                      ? 'bg-white text-slate-800 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-800'
+                  }`}
+                >
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                  <span className="ml-1 px-1.5 py-0.5 bg-slate-200 rounded-full text-xs">
+                    {stats[status]}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Search */}
+            <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+              <Search className="w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by name, team, or submitter..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="bg-transparent text-sm text-slate-700 placeholder-slate-400 focus:outline-none w-64"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Requests List */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          {loading ? (
+            <div className="px-6 py-12 text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+              <p className="text-slate-500">Loading requests...</p>
+            </div>
+          ) : filteredRequests.length === 0 ? (
+            <div className="px-6 py-12 text-center">
+              <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+              <p className="text-slate-500 font-medium text-lg">No {filterStatus} requests found</p>
+              <p className="text-slate-400 text-sm">
+                {filterStatus === 'pending' && 'No pending requests for this month'}
+                {filterStatus === 'approved' && 'No approved requests for this month'}
+                {filterStatus === 'rejected' && 'No rejected requests for this month'}
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {filteredRequests.map((request) => (
+                <div key={request.id} className="p-6 hover:bg-slate-50 transition-colors">
+                  <div className="flex items-start justify-between gap-4">
+                    {/* Left: Request Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-sm flex-shrink-0">
+                          <User className="w-5 h-5 text-white" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-slate-800 truncate">
+                            {request.employee_name}
+                          </h3>
+                          <p className="text-sm text-slate-500">
+                            {request.team_name} • {request.change_type}
+                          </p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          request.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                          request.status === 'approved' ? 'bg-green-100 text-green-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {request.status_display || request.status}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <Calendar className="w-4 h-4 text-slate-400" />
+                          <span>{request.date}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <Clock className="w-4 h-4 text-slate-400" />
+                          <span>{request.requested_date}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <User className="w-4 h-4 text-slate-400" />
+                          <span>Requested by: {request.requested_by}</span>
+                        </div>
+                      </div>
+
+                      {request.is_planned !== null && (
+                        <div className="mt-2 text-xs text-slate-500">
+                          <span className="inline-flex items-center gap-1">
+                            <FileText className="w-3 h-3" />
+                            {request.is_planned ? 'Planned Leave' : 'Unplanned Leave'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right: Action */}
+                    <div className="flex-shrink-0">
+                      <button
+                        onClick={() => {
+                          setSelectedRequest(request);
+                          setShowDetailsModal(true);
+                        }}
+                        className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 hover:text-slate-800"
+                        title="View Details"
+                      >
+                        <Eye className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Details Modal */}
+      {showDetailsModal && selectedRequest && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-800">Request Details</h3>
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <XCircle className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-sm">
+                  <User className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-slate-800 text-lg">{selectedRequest.employee_name}</h4>
+                  <p className="text-sm text-slate-500">{selectedRequest.team_name}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-50 p-4 rounded-lg">
+                  <p className="text-sm text-slate-500 mb-1">Date</p>
+                  <p className="font-medium text-slate-800">{selectedRequest.date}</p>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-lg">
+                  <p className="text-sm text-slate-500 mb-1">Status</p>
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    selectedRequest.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                    selectedRequest.status === 'approved' ? 'bg-green-100 text-green-700' :
+                    'bg-red-100 text-red-700'
+                  }`}>
+                    {selectedRequest.status_display || selectedRequest.status}
+                  </span>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-lg">
+                  <p className="text-sm text-slate-500 mb-1">Change Type</p>
+                  <p className="font-medium text-slate-800">{selectedRequest.change_type}</p>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-lg">
+                  <p className="text-sm text-slate-500 mb-1">Details</p>
+                  <p className="font-medium text-slate-800">{selectedRequest.change_details}</p>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-lg">
+                  <p className="text-sm text-slate-500 mb-1">Requested By</p>
+                  <p className="font-medium text-slate-800">{selectedRequest.requested_by}</p>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-lg">
+                  <p className="text-sm text-slate-500 mb-1">Requested Date</p>
+                  <p className="font-medium text-slate-800">{selectedRequest.requested_date}</p>
+                </div>
+              </div>
+
+              {selectedRequest.is_planned !== null && (
+                <div className="bg-slate-50 p-4 rounded-lg">
+                  <p className="text-sm text-slate-500 mb-1">Leave Type</p>
+                  <p className="font-medium text-slate-800">
+                    {selectedRequest.is_planned ? 'Planned Leave' : 'Unplanned Leave'}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ManagerRosterRequests;
