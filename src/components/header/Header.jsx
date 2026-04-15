@@ -376,6 +376,11 @@ const Header = ({
       return currentPath === '/dashboard' && currentTab === 'billable_report';
     }
 
+    // Check for Roster Report
+    if (view === 'ROSTER_REPORT') {
+      return currentPath === '/my-roster-report';
+    }
+
     return false;
   };
 

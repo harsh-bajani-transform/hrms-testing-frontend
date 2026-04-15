@@ -47,24 +47,25 @@ const ManagerRosterRequests = () => {
       if (response.data && response.data.success) {
         const data = response.data.data || [];
         console.log('Data array length:', data.length);
+        console.log('Raw data sample:', data[0]);
         
         // Convert API response to internal format
         const convertedRequests = data.map(item => ({
           id: item.draft_id,
-          employee_name: item.user_name,
+          user_name: item.user_name,
           employee_id: item.user_id,
           team_name: item.team?.team_name || 'No Team',
           team_id: item.team?.team_id,
           date: item.date,
-          change_type: item.leave_type || "Status Change",
-          change_details: item.changes?.to?.day_type || "Status Change",
+          leave_type: item.leave_type || "Status Change",
+          day_type: item.changes?.to?.day_type || 'leave',
           requested_by: item.requested_by,
-          requested_date: item.requested_at,
+          requested_at: item.requested_at,
           status: item.status,
-          status_display: item.status_display,
-          is_planned: item.is_planned === "yes",
-          leave_type_id: item.leave_type_id
+          is_planned: item.is_planned === "yes"
         }));
+        
+        console.log('Converted requests sample:', convertedRequests[0]);
 
         console.log('Converted requests:', convertedRequests.length);
 
@@ -120,7 +121,7 @@ const ManagerRosterRequests = () => {
 
   const currentRequests = allRequests[filterStatus] || [];
   const filteredRequests = currentRequests.filter(item =>
-    item.employee_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.team_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.requested_by.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -234,10 +235,10 @@ const ManagerRosterRequests = () => {
                         </div>
                         <div className="min-w-0 flex-1">
                           <h3 className="font-semibold text-slate-800 truncate">
-                            {request.employee_name}
+                            {request.user_name}
                           </h3>
                           <p className="text-sm text-slate-500">
-                            {request.team_name} • {request.change_type}
+                            {request.team_name}
                           </p>
                         </div>
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -245,49 +246,33 @@ const ManagerRosterRequests = () => {
                           request.status === 'approved' ? 'bg-green-100 text-green-700' :
                           'bg-red-100 text-red-700'
                         }`}>
-                          {request.status_display || request.status}
+                          {request.status ? request.status.charAt(0).toUpperCase() + request.status.slice(1) : ''}
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <Calendar className="w-4 h-4 text-slate-400" />
-                          <span>{request.date}</span>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                        <div className="text-slate-600">
+                          <strong>Date:</strong> {format(new Date(request.date), 'dd/MM/yyyy')}
                         </div>
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <Clock className="w-4 h-4 text-slate-400" />
-                          <span>{request.requested_date}</span>
+                        <div className="text-slate-600">
+                          <strong>Requested At:</strong> {format(new Date(request.requested_at), 'dd/MM/yyyy')}
                         </div>
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <User className="w-4 h-4 text-slate-400" />
-                          <span>Requested by: {request.requested_by}</span>
+                        <div className="text-slate-600">
+                          <strong>Requested By:</strong> {request.requested_by}
+                        </div>
+                        <div className="text-slate-600">
+                          <strong>Status:</strong> {request.day_type || 'leave'}
+                        </div>
+                        <div className="text-slate-600">
+                          <strong>Leave Type:</strong> {request.leave_type}
+                        </div>
+                        <div className="text-slate-600">
+                          <strong>Planned:</strong> {request.is_planned ? 'Yes' : 'No'}
                         </div>
                       </div>
-
-                      {request.is_planned !== null && (
-                        <div className="mt-2 text-xs text-slate-500">
-                          <span className="inline-flex items-center gap-1">
-                            <FileText className="w-3 h-3" />
-                            {request.is_planned ? 'Planned Leave' : 'Unplanned Leave'}
-                          </span>
-                        </div>
-                      )}
                     </div>
 
-                    {/* Right: Action */}
-                    <div className="flex-shrink-0">
-                      <button
-                        onClick={() => {
-                          setSelectedRequest(request);
-                          setShowDetailsModal(true);
-                        }}
-                        className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 hover:text-slate-800"
-                        title="View Details"
-                      >
-                        <Eye className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
+                                      </div>
                 </div>
               ))}
             </div>

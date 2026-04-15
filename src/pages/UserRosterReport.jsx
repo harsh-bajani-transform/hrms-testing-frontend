@@ -61,46 +61,51 @@ const UserRosterReport = () => {
   const statusOptions = [
     { value: 'present_office', label: 'Present/Work from office', color: 'green' },
     { value: 'present_wfh', label: 'Present/Work From Home', color: 'emerald' },
+    { value: 'wfh', label: 'Work From Home', color: 'emerald' },
     { value: 'half_day_first', label: 'Half Day/First Half', color: 'yellow' },
     { value: 'half_day_second', label: 'Half Day/Second Half', color: 'amber' },
+    { value: 'half_day', label: 'Half Day', color: 'yellow' },
     { value: 'holiday', label: 'Holiday', color: 'purple' },
     { value: 'leave_planned', label: 'Leave/Planned', color: 'orange' },
+    { value: 'leave', label: 'Leave', color: 'orange' },
     { value: 'leave_unplanned', label: 'Leave/Unplanned', color: 'red' },
     { value: 'week_off', label: 'Week off', color: 'slate' },
+    { value: 'weekoff', label: 'Week Off', color: 'slate' },
+    { value: 'working', label: 'Working', color: 'green' },
   ];
 
   // Dummy roster data for the entire month
   const dummyMonthlyRoster = {
-    "2026-04-01": { status: 'present_office', hours: 8 },
-    "2026-04-02": { status: 'present_office', hours: 8 },
-    "2026-04-03": { status: 'present_office', hours: 8 },
-    "2026-04-04": { status: 'present_office', hours: 8 },
-    "2026-04-05": { status: 'present_office', hours: 8 },
-    "2026-04-06": { status: 'week_off', hours: 0 },
-    "2026-04-07": { status: 'week_off', hours: 0 },
-    "2026-04-08": { status: 'present_wfh', hours: 8 },
-    "2026-04-09": { status: 'present_wfh', hours: 8 },
-    "2026-04-10": { status: 'present_wfh', hours: 8 },
-    "2026-04-11": { status: 'present_wfh', hours: 8 },
-    "2026-04-12": { status: 'present_wfh', hours: 8 },
-    "2026-04-13": { status: 'week_off', hours: 0 },
-    "2026-04-14": { status: 'week_off', hours: 0 },
-    "2026-04-15": { status: 'present_office', hours: 8 },
-    "2026-04-16": { status: 'present_office', hours: 8 },
-    "2026-04-17": { status: 'half_day_first', hours: 4 },
-    "2026-04-18": { status: 'present_office', hours: 8 },
-    "2026-04-19": { status: 'present_office', hours: 8 },
-    "2026-04-20": { status: 'week_off', hours: 0 },
-    "2026-04-21": { status: 'week_off', hours: 0 },
-    "2026-04-22": { status: 'present_office', hours: 8 },
-    "2026-04-23": { status: 'present_office', hours: 8 },
-    "2026-04-24": { status: 'present_office', hours: 8 },
-    "2026-04-25": { status: 'present_office', hours: 8 },
-    "2026-04-26": { status: 'present_office', hours: 8 },
-    "2026-04-27": { status: 'week_off', hours: 0 },
-    "2026-04-28": { status: 'week_off', hours: 0 },
-    "2026-04-29": { status: 'present_office', hours: 8 },
-    "2026-04-30": { status: 'present_office', hours: 8 },
+    "2026-04-01": { status: 'present_office' },
+    "2026-04-02": { status: 'present_office' },
+    "2026-04-03": { status: 'present_office' },
+    "2026-04-04": { status: 'present_office' },
+    "2026-04-05": { status: 'present_office' },
+    "2026-04-06": { status: 'week_off' },
+    "2026-04-07": { status: 'week_off' },
+    "2026-04-08": { status: 'present_wfh' },
+    "2026-04-09": { status: 'present_wfh' },
+    "2026-04-10": { status: 'present_wfh' },
+    "2026-04-11": { status: 'present_wfh' },
+    "2026-04-12": { status: 'present_wfh' },
+    "2026-04-13": { status: 'week_off' },
+    "2026-04-14": { status: 'week_off' },
+    "2026-04-15": { status: 'present_office' },
+    "2026-04-16": { status: 'present_office' },
+    "2026-04-17": { status: 'half_day_first' },
+    "2026-04-18": { status: 'present_office' },
+    "2026-04-19": { status: 'present_office' },
+    "2026-04-20": { status: 'week_off' },
+    "2026-04-21": { status: 'week_off' },
+    "2026-04-22": { status: 'present_office' },
+    "2026-04-23": { status: 'present_office' },
+    "2026-04-24": { status: 'present_office' },
+    "2026-04-25": { status: 'present_office' },
+    "2026-04-26": { status: 'present_office' },
+    "2026-04-27": { status: 'week_off' },
+    "2026-04-28": { status: 'week_off' },
+    "2026-04-29": { status: 'present_office' },
+    "2026-04-30": { status: 'present_office' },
   };
 
   // Get weeks in current month
@@ -121,29 +126,30 @@ const UserRosterReport = () => {
   const getDayData = (date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
     
-    // Use selected team member's calendar data if available (for managers)
-    const userToShow = (isAssistantManager || isProjectManager || isAdmin || isSuperAdmin) && selectedTeamMember
-      ? selectedTeamMember
-      : filteredData.find(item => item.user_id === (user?.user_id || user?.id));
+    // Use API data if available
+    const userData = apiData;
     
-    if (userToShow?.calendar) {
-      const calendarEntry = userToShow.calendar.find(entry => entry.date === dateStr);
+    if (userData?.calendar) {
+      const calendarEntry = userData.calendar.find(entry => entry.date === dateStr);
       if (calendarEntry) {
         return {
-          status: calendarEntry.status === 'working' ? 'present_office' : 
-                  calendarEntry.status === 'weekoff' ? 'week_off' :
+          status: calendarEntry.status === 'weekoff' ? 'week_off' :
                   calendarEntry.status === 'holiday' ? 'holiday' :
-                  calendarEntry.status === 'leave' ? 'leave_planned' : calendarEntry.status,
-          hours: calendarEntry.status === 'working' ? 8 : 0,
+                  calendarEntry.status === 'leave' ? 'leave_planned' : 
+                  calendarEntry.status === 'wfh' ? 'present_wfh' :
+                  calendarEntry.status === 'half_day' ? 'half_day_first' : calendarEntry.status,
           color: calendarEntry.color,
           shift: calendarEntry.shift,
-          editable: calendarEntry.editable
+          editable: calendarEntry.editable,
+          leave_type: calendarEntry.leave_type_name,
+          is_planned: calendarEntry.is_planned,
+          pending_status: calendarEntry.pending_status
         };
       }
     }
     
     // Fallback to dummy data
-    return dummyMonthlyRoster[dateStr] || { status: null, hours: 0 };
+    return dummyMonthlyRoster[dateStr] || { status: null };
   };
 
   // Calculate monthly statistics
@@ -154,7 +160,6 @@ const UserRosterReport = () => {
       holidays: 0,
       leaves: 0,
       halfDays: 0,
-      totalHours: 0,
       presentOffice: 0,
       presentWFH: 0
     };
@@ -164,17 +169,14 @@ const UserRosterReport = () => {
         case 'present_office':
           stats.workingDays++;
           stats.presentOffice++;
-          stats.totalHours += day.hours;
           break;
         case 'present_wfh':
           stats.workingDays++;
           stats.presentWFH++;
-          stats.totalHours += day.hours;
           break;
         case 'half_day_first':
         case 'half_day_second':
           stats.halfDays++;
-          stats.totalHours += day.hours;
           break;
         case 'week_off':
           stats.weekOffs++;
@@ -197,7 +199,6 @@ const UserRosterReport = () => {
     const weekDays = getWeekDays(week);
     const stats = {
       workingDays: 0,
-      totalHours: 0,
       presentOffice: 0,
       presentWFH: 0
     };
@@ -207,13 +208,9 @@ const UserRosterReport = () => {
       if (dayData.status === 'present_office') {
         stats.workingDays++;
         stats.presentOffice++;
-        stats.totalHours += dayData.hours;
       } else if (dayData.status === 'present_wfh') {
         stats.workingDays++;
         stats.presentWFH++;
-        stats.totalHours += dayData.hours;
-      } else if (dayData.status === 'half_day_first' || dayData.status === 'half_day_second') {
-        stats.totalHours += dayData.hours;
       }
     });
 
@@ -243,7 +240,7 @@ const UserRosterReport = () => {
     return `${month}${year}`;
   };
 
-  // Fetch roster data from API
+  // Fetch roster data from API - updated for new API structure
   const fetchRosterData = async () => {
     try {
       setLoading(true);
@@ -263,23 +260,13 @@ const UserRosterReport = () => {
         const data = response.data.data;
         setApiData(data);
         
-        // Set default selected team member to current user for managers
-        const currentUserId = user?.user_id || user?.id;
-        const currentUserData = data.find(item => item.user_id === currentUserId);
-        if (currentUserData) {
-          setSelectedTeamMember(currentUserData);
-        } else if (data.length > 0) {
-          setSelectedTeamMember(data[0]);
-        }
-        
         // Update user profile from API response
-        if (data && data.length > 0) {
-          const userData = data.find(item => item.user_id === currentUserId) || data[0];
+        if (data) {
           setUserProfile({
-            name: userData.user_name,
-            email: userData.user_email,
-            employee_id: userData.user_id,
-            department: userData.team?.team_name || "",
+            name: data.user_name,
+            email: data.user_email,
+            employee_id: data.user_id,
+            department: data.team?.team_name || "",
             role: response.data.role || user?.role || ""
           });
         }
@@ -364,29 +351,22 @@ const UserRosterReport = () => {
     return apiData.filter(item => item.user_id === currentUserId);
   };
 
-  const filteredData = getFilteredData();
-  
-  // Get stats from API data
-  const getStatsFromData = (userData) => {
-    if (!userData?.summary) return { workingDays: 0, weekOffs: 0, holidays: 0, leaves: 0, totalHours: 0, presentOffice: 0, presentWFH: 0 };
-    const summary = userData.summary;
+  // Get stats from API data - updated for new API structure
+  const getStatsFromData = () => {
+    if (!apiData?.summary) return { workingDays: 0, weekOffs: 0, holidays: 0, leaves: 0, presentOffice: 0, presentWFH: 0 };
+    const summary = apiData.summary;
     return {
       workingDays: summary.working_days || 0,
       weekOffs: summary.weekoffs || 0,
       holidays: summary.holidays || 0,
       leaves: 0, // Not in API response
-      totalHours: parseFloat(summary.target) || 0,
       presentOffice: summary.working_days || 0,
       presentWFH: 0
     };
   };
 
-  // Use selected team member's data for managers, otherwise use current user data
-  const statsData = (isAssistantManager || isProjectManager || isAdmin || isSuperAdmin) && selectedTeamMember 
-    ? selectedTeamMember 
-    : filteredData.find(item => item.user_id === (user?.user_id || user?.id));
-  
-  const monthlyStats = statsData ? getStatsFromData(statsData) : calculateMonthlyStats();
+  // Use API stats if available, otherwise calculate from dummy data
+  const monthlyStats = apiData?.summary ? getStatsFromData() : calculateMonthlyStats();
   const weeks = getWeeksInMonth();
 
   return (
@@ -488,59 +468,7 @@ const UserRosterReport = () => {
               </div>
             )}
 
-            {/* Actions */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleDownloadReport}
-                disabled={loading}
-                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
-              >
-                <Download className="w-4 h-4" />
-                {loading ? 'Downloading...' : 'Download Report'}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Monthly Summary Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-2">
-              <Briefcase className="w-8 h-8 text-green-500" />
-              <span className="text-2xl font-bold text-green-600">{monthlyStats.workingDays}</span>
-            </div>
-            <div className="text-sm font-medium text-slate-700">Working Days</div>
-            <div className="text-xs text-slate-500 mt-1">
-              Office: {monthlyStats.presentOffice} | WFH: {monthlyStats.presentWFH}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-2">
-              <Calendar className="w-8 h-8 text-blue-500" />
-              <span className="text-2xl font-bold text-blue-600">{monthlyStats.weekOffs}</span>
-            </div>
-            <div className="text-sm font-medium text-slate-700">Week Offs</div>
-            <div className="text-xs text-slate-500 mt-1">Regular weekends</div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-2">
-              <AlertCircle className="w-8 h-8 text-amber-500" />
-              <span className="text-2xl font-bold text-amber-600">{monthlyStats.leaves}</span>
-            </div>
-            <div className="text-sm font-medium text-slate-700">Leaves</div>
-            <div className="text-xs text-slate-500 mt-1">Planned + Unplanned</div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-2">
-              <Clock className="w-8 h-8 text-purple-500" />
-              <span className="text-2xl font-bold text-purple-600">{monthlyStats.totalHours}h</span>
-            </div>
-            <div className="text-sm font-medium text-slate-700">Total Hours</div>
-            <div className="text-xs text-slate-500 mt-1">Monthly total</div>
-          </div>
+                      </div>
         </div>
 
         {/* Week Selector */}
@@ -561,9 +489,6 @@ const UserRosterReport = () => {
                     }`}
                   >
                     Week {index + 1}
-                    <div className="text-xs opacity-75">
-                      {weekStats.workingDays} days • {weekStats.totalHours}h
-                    </div>
                   </button>
                 );
               })}
@@ -588,7 +513,27 @@ const UserRosterReport = () => {
                   const dayData = getDayData(day);
                   const isWeekendDay = isWeekend(day);
                   const statusOption = statusOptions.find(opt => opt.value === dayData.status);
-                  
+
+                  // Format status for display
+                  const formatStatus = (status) => {
+                    const statusMap = {
+                      'wfh': 'Work From Home',
+                      'half_day': 'Half Day',
+                      'working': 'Working',
+                      'leave': 'Leave',
+                      'weekoff': 'Week Off',
+                      'week_off': 'Week Off',
+                      'holiday': 'Holiday',
+                      'present_office': 'Present Office',
+                      'present_wfh': 'Work From Home',
+                      'leave_planned': 'Leave',
+                      'leave_unplanned': 'Leave',
+                      'half_day_first': 'Half Day',
+                      'half_day_second': 'Half Day'
+                    };
+                    return statusMap[status] || status || 'Off';
+                  };
+
                   return (
                     <div 
                       key={dayIndex} 
@@ -602,24 +547,49 @@ const UserRosterReport = () => {
                       <div className="text-lg font-bold text-slate-800 mb-3">
                         {format(day, 'dd')}
                       </div>
-                      
-                      <div className={`inline-flex flex-col items-center justify-center px-3 py-3 rounded-lg w-full ${
+
+                      {/* Pending Status Badge */}
+                      {dayData.pending_status === 'pending' && (
+                        <div className="mb-2">
+                          <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded-full">
+                            Pending
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Shift */}
+                      <div className="mb-2">
+                        <span className="text-xs text-slate-500 font-medium">
+                          Shift: {dayData.shift || '-'}
+                        </span>
+                      </div>
+
+                      {/* Status */}
+                      <div className={`inline-flex flex-col items-center justify-center px-3 py-3 rounded-lg w-full mb-2 ${
                         statusOption ? `bg-${statusOption.color}-100 text-${statusOption.color}-700 border border-${statusOption.color}-200` : 'bg-slate-50 text-slate-400 border border-slate-200'
                       }`}>
                         <div className="text-xs font-semibold leading-tight text-center">
-                          {statusOption ? statusOption.label.split('/')[0] : 'Off'}
+                          {formatStatus(dayData.status)}
                         </div>
-                        {dayData.hours > 0 && (
-                          <div className="text-xs opacity-75 mt-1">
-                            {dayData.status === 'present_office' || dayData.status === 'present_wfh' ? '9:00' : 
-                             dayData.status === 'half_day_first' || dayData.status === 'half_day_second' ? '4:30' : ''}
-                          </div>
-                        )}
                       </div>
+
+                      {/* Leave Details */}
+                      {(dayData.status === 'leave_planned' || dayData.status === 'leave_unplanned' || dayData.status === 'leave') && (
+                        <div className="mt-2 space-y-1">
+                          {dayData.leave_type && (
+                            <div className="text-xs text-slate-600">
+                              <strong>{dayData.leave_type}</strong>
+                            </div>
+                          )}
+                          <div className="text-xs text-slate-500">
+                            Planned: {dayData.is_planned === 'yes' ? 'Yes' : 'No'}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Status Icon */}
                       <div className="mt-3 flex justify-center">
-                        {dayData.status === 'present_office' && <Briefcase className="w-4 h-4 text-green-500" />}
+                        {(dayData.status === 'present_office' || dayData.status === 'working') && <Briefcase className="w-4 h-4 text-green-500" />}
                         {dayData.status === 'present_wfh' && <Coffee className="w-4 h-4 text-emerald-500" />}
                         {dayData.status === 'half_day_first' && <Clock className="w-4 h-4 text-yellow-500" />}
                         {dayData.status === 'half_day_second' && <Clock className="w-4 h-4 text-amber-500" />}
@@ -633,37 +603,11 @@ const UserRosterReport = () => {
                 })}
               </div>
 
-              {/* Week Summary */}
-              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium text-blue-700">
-                    Week Summary
-                  </div>
-                  <div className="flex items-center gap-6 text-sm text-blue-600">
-                    <span>Working Days: {calculateWeekStats(selectedWeek).workingDays}</span>
-                    <span>Total Hours: {calculateWeekStats(selectedWeek).totalHours}h</span>
-                    <span>Office: {calculateWeekStats(selectedWeek).presentOffice}</span>
-                    <span>WFH: {calculateWeekStats(selectedWeek).presentWFH}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+                          </div>
           </div>
         )}
 
-        {/* Legend */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <h4 className="font-semibold text-slate-800 mb-4">Status Legend</h4>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {statusOptions.map((status) => (
-              <div key={status.value} className="flex items-center gap-3">
-                <div className={`w-4 h-4 bg-${status.color}-100 border border-${status.color}-200 rounded`}></div>
-                <span className="text-sm text-slate-600">{status.label}</span>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
