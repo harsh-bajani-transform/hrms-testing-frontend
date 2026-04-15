@@ -20,7 +20,6 @@ import {
   ChevronRight,
   Save,
   X,
-  Edit3,
   Grid3X3,
   CheckSquare,
   Sun,
@@ -50,8 +49,6 @@ const AssistantManagerRoster = () => {
   const [selectedTeam, setSelectedTeam] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [editingCell, setEditingCell] = useState(null);
-  const [bulkEditMode, setBulkEditMode] = useState(false);
-  const [selectedCells, setSelectedCells] = useState([]);
   const [changedCells, setChangedCells] = useState([]);
   const [originalRosterData, setOriginalRosterData] = useState([]);
   const [hasChanges, setHasChanges] = useState(false);
@@ -117,16 +114,7 @@ const AssistantManagerRoster = () => {
   // Handle cell editing
   const handleCellClick = (rosterId, day, field) => {
     console.log('Cell clicked:', { rosterId, day, field });
-    if (bulkEditMode) {
-      const cellId = `${rosterId}-${day}`;
-      setSelectedCells(prev => 
-        prev.includes(cellId) 
-          ? prev.filter(id => id !== cellId)
-          : [...prev, cellId]
-      );
-    } else {
-      setEditingCell({ rosterId, day, field });
-    }
+    setEditingCell({ rosterId, day, field });
   };
 
   const handleCellBlur = () => {
@@ -216,32 +204,6 @@ const AssistantManagerRoster = () => {
     if (changedCells.length === 0) return 'no_changes';
     if (isMidMonthSubmission()) return 'mid_month';
     return 'month_end';
-  };
-
-  // Bulk edit operations
-  const handleBulkEdit = (newValue) => {
-    selectedCells.forEach(cellId => {
-      const [rosterId, day] = cellId.split('-');
-      // Set raw_status based on selection
-      handleCellChange(parseInt(rosterId), day, 'raw_status', newValue);
-      // Also set internal status for display
-      if (newValue === 'working') {
-        handleCellChange(parseInt(rosterId), day, 'status', 'present_office');
-      } else if (newValue === 'wfh') {
-        handleCellChange(parseInt(rosterId), day, 'status', 'present_wfh');
-      } else if (newValue === 'halfday') {
-        handleCellChange(parseInt(rosterId), day, 'status', 'half_day_first');
-      } else if (newValue === 'weekoff') {
-        handleCellChange(parseInt(rosterId), day, 'status', 'week_off');
-      } else if (newValue === 'leave') {
-        // For leave, user needs to select leave type individually
-        handleCellChange(parseInt(rosterId), day, 'status', 'leave_planned');
-        handleCellChange(parseInt(rosterId), day, 'planned', 1);
-      }
-    });
-    setSelectedCells([]);
-    setBulkEditMode(false);
-    toast.success(`Updated ${selectedCells.length} cells`);
   };
 
   // Submit roster with sequential API calls
@@ -595,20 +557,6 @@ const AssistantManagerRoster = () => {
               </div>
             </div>
             
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setBulkEditMode(!bulkEditMode)}
-                className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-                  bulkEditMode 
-                    ? 'bg-blue-500 text-white shadow-lg' 
-                    : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
-                }`}
-              >
-                {bulkEditMode ? <CheckSquare className="w-4 h-4" /> : <Edit3 className="w-4 h-4" />}
-                {bulkEditMode ? 'Bulk Edit ON' : 'Bulk Edit'}
-              </button>
-            </div>
           </div>
         </div>
 
@@ -719,37 +667,6 @@ const AssistantManagerRoster = () => {
           </div>
         </div>
 
-        {/* Bulk Edit Controls */}
-        {selectedCells.length > 0 && (
-          <div className="mt-4 flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <span className="text-sm text-blue-700 font-medium">
-              {selectedCells.length} cells selected
-            </span>
-            <Select onValueChange={handleBulkEdit}>
-              <SelectTrigger className="w-64">
-                <SelectValue placeholder="Set status for selected cells..." />
-              </SelectTrigger>
-              <SelectContent className="bg-white shadow-xl border border-slate-200 [&_[data-radix-select-item-indicator]]:left-2">
-                {rosterStatusOptions.map(option => (
-                  <SelectItem 
-                    key={option.value} 
-                    value={option.value}
-                    className="bg-white hover:bg-slate-50 pl-8 pr-2 relative"
-                  >
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <button
-              onClick={() => setSelectedCells([])}
-              className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded text-sm"
-            >
-              Clear Selection
-            </button>
-          </div>
-        )}
-
         {/* Weekly Roster Table */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
         <div className="overflow-x-auto">
@@ -803,8 +720,6 @@ const AssistantManagerRoster = () => {
                       const dateKey = format(day, 'yyyy-MM-dd'); // Use date for data lookup
                       const dayData = roster[dateKey]; // Look up by date, not day name
                       const isWeekendDay = isWeekend(day);
-                      const cellId = `${roster.roster_id}-${dateKey}`;
-                      const isSelected = selectedCells.includes(cellId);
                       
                       // Debug: Log all cells for first user to see what's being rendered
                       if (roster.user_name === 'Yahya Irani' && idx <= 7) {
@@ -817,7 +732,7 @@ const AssistantManagerRoster = () => {
                           data-editing-cell={editingCell?.rosterId === roster.roster_id && editingCell?.day === dateKey && editingCell?.field === 'status' ? 'true' : undefined}
                           className={`px-2 py-3 text-center cursor-pointer transition-all min-w-[140px] ${
                             isWeekendDay ? 'bg-rose-50/50' : ''
-                          } ${isSelected ? 'bg-blue-100 ring-2 ring-blue-500 shadow-sm' : ''} hover:bg-slate-50`}
+                          } hover:bg-slate-50`}
                           onClick={() => handleCellClick(roster.roster_id, dateKey, 'status')}
                         >
                           {editingCell?.rosterId === roster.roster_id && 
