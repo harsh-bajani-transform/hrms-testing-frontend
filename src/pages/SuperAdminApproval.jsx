@@ -68,8 +68,8 @@ const SuperAdminApproval = () => {
     if (searchTerm) {
       data = data.filter(item => 
         item.employee_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.team.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.submitted_by.toLowerCase().includes(searchTerm.toLowerCase())
+        item.team_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.requested_by.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
@@ -310,22 +310,57 @@ const SuperAdminApproval = () => {
 
       if (response.data && response.data.success) {
         // Convert API response to internal format
-        const convertedPending = response.data.pending_requests.map(request => ({
-          id: request.draft_id,
-          employee_name: request.user_name,
-          employee_id: request.user_id,
-          team_name: request.team?.team_name || 'No Team',
-          team_id: request.team?.team_id,
-          date: request.date,
-          action: request.request?.action || 'Status Change',
-          leave_type: request.request?.leave_type || null,
-          change_type: request.request?.leave === "yes" ? "Leave" : "Work",
-          change_details: request.request?.leave_type || "Status Change",
-          requested_by: request.requested_by,
-          requested_date: request.requested_at,
-          status: 'pending',
-          is_planned: request.request?.is_planned === "yes"
-        }));
+        const convertedPending = response.data.pending_requests.map(request => {
+          const req = request.request || {};
+          
+          // Determine request type and display info
+          let requestType = 'Status Change';
+          let displayDetails = '';
+          let badgeColor = 'bg-slate-100 text-slate-700';
+          
+          if (req.leave === "yes") {
+            requestType = 'Leave';
+            displayDetails = req.leave_type || 'Leave';
+            badgeColor = 'bg-orange-100 text-orange-700';
+          } else if (req.action?.includes('wfh')) {
+            requestType = 'WFH';
+            displayDetails = 'Work From Home';
+            badgeColor = 'bg-blue-100 text-blue-700';
+          } else if (req.action?.includes('half day')) {
+            requestType = 'Half Day';
+            displayDetails = 'Half Day';
+            badgeColor = 'bg-yellow-100 text-yellow-700';
+          } else if (req.action?.includes('working day')) {
+            requestType = 'Working Day';
+            displayDetails = 'Working Day';
+            badgeColor = 'bg-green-100 text-green-700';
+          } else if (req.shift) {
+            requestType = 'Shift Change';
+            displayDetails = `Shift: ${req.shift}`;
+            badgeColor = 'bg-purple-100 text-purple-700';
+          }
+          
+          return {
+            id: request.draft_id,
+            employee_name: request.user_name,
+            employee_id: request.user_id,
+            team_name: request.team?.team_name || 'No Team',
+            team_id: request.team?.team_id,
+            date: request.date,
+            action: req.action || (req.shift ? 'Shift Change' : 'Status Change'),
+            leave_type: req.leave_type || null,
+            request_type: requestType,
+            display_details: displayDetails,
+            badge_color: badgeColor,
+            shift: req.shift || null,
+            is_leave: req.leave === "yes",
+            is_planned_leave: req.is_planned === "yes",
+            requested_by: request.requested_by,
+            requested_date: request.requested_at,
+            status: 'pending',
+            raw_request: req
+          };
+        });
 
         setPendingApprovals(convertedPending);
       } else {
@@ -356,22 +391,76 @@ const SuperAdminApproval = () => {
 
       if (response.data && response.data.success) {
         // Convert API response to internal format
-        const convertedApproved = response.data.data.map(item => ({
-          id: item.draft_id,
-          employee_name: item.user_name,
-          employee_id: item.user_id,
-          team_name: item.team?.team_name || 'No Team',
-          team_id: item.team?.team_id,
-          date: item.date,
-          action: item.action || item.leave_type || item.changes?.to?.day_type || 'Status Change',
-          leave_type: item.leave_type || null,
-          change_type: item.leave_type || "Status Change",
-          change_details: item.changes?.to?.day_type || "Status Change",
-          requested_by: item.requested_by,
-          requested_date: item.requested_at,
-          status: 'approved',
-          is_planned: item.is_planned === "yes"
-        }));
+        const convertedApproved = response.data.data.map(item => {
+          const toDayType = item.changes?.to?.day_type;
+          const fromDayType = item.changes?.from?.day_type;
+          const toShift = item.changes?.to?.shift;
+          const fromShift = item.changes?.from?.shift;
+          
+          // Determine request type based on day_type and other fields
+          let requestType = 'Status Change';
+          let displayDetails = '';
+          let badgeColor = 'bg-slate-100 text-slate-700';
+          let actionText = '';
+          
+          // Check for shift change first
+          if (fromShift && toShift && fromShift !== toShift) {
+            requestType = 'Shift Change';
+            displayDetails = `${fromShift} → ${toShift}`;
+            badgeColor = 'bg-purple-100 text-purple-700';
+            actionText = `Shift: ${fromShift} → ${toShift}`;
+          } else if (item.is_leave === 1 || toDayType === 'leave') {
+            requestType = 'Leave';
+            displayDetails = item.leave_type !== 'Unknown' ? item.leave_type : 'Leave';
+            badgeColor = 'bg-orange-100 text-orange-700';
+            actionText = item.leave_type !== 'Unknown' ? item.leave_type : 'Leave';
+          } else if (toDayType === 'wfh') {
+            requestType = 'WFH';
+            displayDetails = 'Work From Home';
+            badgeColor = 'bg-blue-100 text-blue-700';
+            actionText = 'Work From Home';
+          } else if (toDayType === 'half_day') {
+            requestType = 'Half Day';
+            displayDetails = 'Half Day';
+            badgeColor = 'bg-yellow-100 text-yellow-700';
+            actionText = 'Half Day';
+          } else if (toDayType === 'weekoff') {
+            requestType = 'Week Off';
+            displayDetails = 'Week Off';
+            badgeColor = 'bg-pink-100 text-pink-700';
+            actionText = 'Week Off';
+          } else if (toDayType === 'working') {
+            requestType = 'Working Day';
+            displayDetails = 'Working Day';
+            badgeColor = 'bg-green-100 text-green-700';
+            actionText = 'Working Day';
+          }
+          
+          return {
+            id: item.draft_id,
+            employee_name: item.user_name,
+            employee_id: item.user_id,
+            team_name: item.team?.team_name || 'No Team',
+            team_id: item.team?.team_id,
+            date: item.date,
+            action: actionText || item.action || 'Status Change',
+            leave_type: item.leave_type !== 'Unknown' ? item.leave_type : null,
+            request_type: requestType,
+            display_details: displayDetails,
+            badge_color: badgeColor,
+            shift: item.shift || toShift || null,
+            from_shift: fromShift,
+            to_shift: toShift,
+            is_leave: item.is_leave === 1 || toDayType === 'leave',
+            is_planned_leave: item.is_planned === "yes",
+            day_type_from: fromDayType,
+            day_type_to: toDayType,
+            requested_by: item.requested_by,
+            requested_date: item.requested_at,
+            status: 'approved',
+            changes: item.changes
+          };
+        });
 
         setApprovedRosters(convertedApproved);
       } else {
@@ -402,22 +491,76 @@ const SuperAdminApproval = () => {
 
       if (response.data && response.data.success) {
         // Convert API response to internal format
-        const convertedRejected = response.data.data.map(item => ({
-          id: item.draft_id,
-          employee_name: item.user_name,
-          employee_id: item.user_id,
-          team_name: item.team?.team_name || 'No Team',
-          team_id: item.team?.team_id,
-          date: item.date,
-          action: item.action || item.leave_type || item.changes?.to?.day_type || 'Status Change',
-          leave_type: item.leave_type || null,
-          change_type: item.leave_type || "Status Change",
-          change_details: item.changes?.to?.day_type || "Status Change",
-          requested_by: item.requested_by,
-          requested_date: item.requested_at,
-          status: 'rejected',
-          is_planned: item.is_planned === "yes"
-        }));
+        const convertedRejected = response.data.data.map(item => {
+          const toDayType = item.changes?.to?.day_type;
+          const fromDayType = item.changes?.from?.day_type;
+          const toShift = item.changes?.to?.shift;
+          const fromShift = item.changes?.from?.shift;
+          
+          // Determine request type based on day_type and other fields
+          let requestType = 'Status Change';
+          let displayDetails = '';
+          let badgeColor = 'bg-slate-100 text-slate-700';
+          let actionText = '';
+          
+          // Check for shift change first
+          if (fromShift && toShift && fromShift !== toShift) {
+            requestType = 'Shift Change';
+            displayDetails = `${fromShift} → ${toShift}`;
+            badgeColor = 'bg-purple-100 text-purple-700';
+            actionText = `Shift: ${fromShift} → ${toShift}`;
+          } else if (item.is_leave === 1 || toDayType === 'leave') {
+            requestType = 'Leave';
+            displayDetails = item.leave_type !== 'Unknown' ? item.leave_type : 'Leave';
+            badgeColor = 'bg-orange-100 text-orange-700';
+            actionText = item.leave_type !== 'Unknown' ? item.leave_type : 'Leave';
+          } else if (toDayType === 'wfh') {
+            requestType = 'WFH';
+            displayDetails = 'Work From Home';
+            badgeColor = 'bg-blue-100 text-blue-700';
+            actionText = 'Work From Home';
+          } else if (toDayType === 'half_day') {
+            requestType = 'Half Day';
+            displayDetails = 'Half Day';
+            badgeColor = 'bg-yellow-100 text-yellow-700';
+            actionText = 'Half Day';
+          } else if (toDayType === 'weekoff') {
+            requestType = 'Week Off';
+            displayDetails = 'Week Off';
+            badgeColor = 'bg-pink-100 text-pink-700';
+            actionText = 'Week Off';
+          } else if (toDayType === 'working') {
+            requestType = 'Working Day';
+            displayDetails = 'Working Day';
+            badgeColor = 'bg-green-100 text-green-700';
+            actionText = 'Working Day';
+          }
+          
+          return {
+            id: item.draft_id,
+            employee_name: item.user_name,
+            employee_id: item.user_id,
+            team_name: item.team?.team_name || 'No Team',
+            team_id: item.team?.team_id,
+            date: item.date,
+            action: actionText || item.action || 'Status Change',
+            leave_type: item.leave_type !== 'Unknown' ? item.leave_type : null,
+            request_type: requestType,
+            display_details: displayDetails,
+            badge_color: badgeColor,
+            shift: item.shift || toShift || null,
+            from_shift: fromShift,
+            to_shift: toShift,
+            is_leave: item.is_leave === 1 || toDayType === 'leave',
+            is_planned_leave: item.is_planned === "yes",
+            day_type_from: fromDayType,
+            day_type_to: toDayType,
+            requested_by: item.requested_by,
+            requested_date: item.requested_at,
+            status: 'rejected',
+            changes: item.changes
+          };
+        });
 
         setRejectedRosters(convertedRejected);
       } else {
@@ -643,9 +786,16 @@ const SuperAdminApproval = () => {
                         }`}>
                           {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
                         </span>
-                        <span className="px-3 py-1 bg-purple-100 text-purple-700 text-sm font-medium rounded-full">
-                          {item.action ? item.action.charAt(0).toUpperCase() + item.action.slice(1) : ''}
+                        {/* Dynamic Request Type Badge */}
+                        <span className={`px-3 py-1 text-sm font-medium rounded-full ${item.badge_color || 'bg-purple-100 text-purple-700'}`}>
+                          {item.request_type}
                         </span>
+                        {/* Show details badge for shift */}
+                        {item.shift && (
+                          <span className="px-3 py-1 bg-indigo-100 text-indigo-700 text-sm font-medium rounded-full">
+                            Shift: {item.shift}
+                          </span>
+                        )}
                       </div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600">
@@ -661,12 +811,36 @@ const SuperAdminApproval = () => {
                           <Clock className="w-4 h-4" />
                           <span>Requested At: {format(new Date(item.requested_date), 'dd/MM/yyyy')}</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span><strong>Planned:</strong> {item.is_planned ? 'Yes' : 'No'}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span><strong>Leave Type:</strong> {item.leave_type || '-'}</span>
-                        </div>
+                        {/* Show From → To Status Change */}
+                        {(item.day_type_from || item.day_type_to) && (
+                          <div className="flex items-center gap-2">
+                            <span><strong>Status:</strong> {item.day_type_from || '-'} → {item.day_type_to || '-'}</span>
+                          </div>
+                        )}
+                        {/* Show From → To Shift Change */}
+                        {(item.from_shift || item.to_shift) && (
+                          <div className="flex items-center gap-2">
+                            <span><strong>Shift:</strong> {item.from_shift || '-'} → {item.to_shift || '-'}</span>
+                          </div>
+                        )}
+                        {/* Show Action */}
+                        {item.action && item.action !== 'Unknown' && (
+                          <div className="flex items-center gap-2">
+                            <span><strong>Action:</strong> {item.action}</span>
+                          </div>
+                        )}
+                        {/* Show Planned only for leave requests */}
+                        {item.is_leave && (
+                          <div className="flex items-center gap-2">
+                            <span><strong>Planned:</strong> {item.is_planned_leave ? 'Yes' : 'No'}</span>
+                          </div>
+                        )}
+                        {/* Show Leave Type only for leave requests */}
+                        {item.is_leave && (
+                          <div className="flex items-center gap-2">
+                            <span><strong>Leave Type:</strong> {item.leave_type || '-'}</span>
+                          </div>
+                        )}
                       </div>
 
                       {item.status === 'rejected' && item.rejection_reason && (
@@ -728,9 +902,27 @@ const SuperAdminApproval = () => {
                   <div><strong>Date:</strong> {format(new Date(selectedApproval.date), 'dd/MM/yyyy')}</div>
                   <div><strong>Requested by:</strong> {selectedApproval.requested_by}</div>
                   <div><strong>Requested date:</strong> {format(new Date(selectedApproval.requested_date), 'dd/MM/yyyy')}</div>
-                  <div><strong>Action:</strong> {selectedApproval.action ? selectedApproval.action.charAt(0).toUpperCase() + selectedApproval.action.slice(1) : 'Status Change'}</div>
-                  <div><strong>Planned:</strong> {selectedApproval.is_planned ? 'Yes' : 'No'}</div>
-                  <div><strong>Leave Type:</strong> {selectedApproval.leave_type || '-'}</div>
+                  <div><strong>Request Type:</strong> {selectedApproval.request_type || 'Status Change'}</div>
+                  {/* Show From → To Status Change */}
+                  {(selectedApproval.day_type_from || selectedApproval.day_type_to) && (
+                    <><div><strong>Status Change:</strong> {selectedApproval.day_type_from || '-'} → {selectedApproval.day_type_to || '-'}</div></>
+                  )}
+                  {/* Show From → To Shift Change */}
+                  {(selectedApproval.from_shift || selectedApproval.to_shift) && (
+                    <><div><strong>Shift Change:</strong> {selectedApproval.from_shift || '-'} → {selectedApproval.to_shift || '-'}</div></>
+                  )}
+                  {/* Show Action if available and not Unknown */}
+                  {selectedApproval.action && selectedApproval.action !== 'Unknown' && (
+                    <><div><strong>Action:</strong> {selectedApproval.action}</div></>
+                  )}
+                  {/* Show Planned only for leave requests */}
+                  {selectedApproval.is_leave && (
+                    <><div><strong>Planned:</strong> {selectedApproval.is_planned_leave ? 'Yes' : 'No'}</div></>
+                  )}
+                  {/* Show Leave Type only for leave requests */}
+                  {selectedApproval.is_leave && (
+                    <><div><strong>Leave Type:</strong> {selectedApproval.leave_type || '-'}</div></>
+                  )}
                 </div>
 
                 

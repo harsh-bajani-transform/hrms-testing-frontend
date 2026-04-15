@@ -261,10 +261,15 @@ const ManagerRosterRequests = () => {
                           <strong>Requested By:</strong> {request.requested_by}
                         </div>
                         <div className="text-slate-600">
-                          <strong>Status:</strong> {request.day_type || 'leave'}
+                          <strong>Status:</strong> {request.day_type || '-'}
                         </div>
+                        {request.changes ? (
+                          <div className="text-slate-600">
+                            <strong>Shift:</strong> {request.changes.from?.shift || '-'} → {request.changes.to?.shift || '-'}
+                          </div>
+                        ) : null}
                         <div className="text-slate-600">
-                          <strong>Leave Type:</strong> {request.leave_type}
+                          <strong>Leave Type:</strong> {request.leave_type || '-'}
                         </div>
                         <div className="text-slate-600">
                           <strong>Planned:</strong> {request.is_planned ? 'Yes' : 'No'}
