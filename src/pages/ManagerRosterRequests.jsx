@@ -50,20 +50,59 @@ const ManagerRosterRequests = () => {
         console.log('Raw data sample:', data[0]);
         
         // Convert API response to internal format
-        const convertedRequests = data.map(item => ({
-          id: item.draft_id,
-          user_name: item.user_name,
-          employee_id: item.user_id,
-          team_name: item.team?.team_name || 'No Team',
-          team_id: item.team?.team_id,
-          date: item.date,
-          leave_type: item.leave_type || "Status Change",
-          day_type: item.changes?.to?.day_type || 'leave',
-          requested_by: item.requested_by,
-          requested_at: item.requested_at,
-          status: item.status,
-          is_planned: item.is_planned === "yes"
-        }));
+        const convertedRequests = data.map(item => {
+          const toDayType = item.changes?.to?.day_type;
+          const fromDayType = item.changes?.from?.day_type;
+          const toShift = item.changes?.to?.shift;
+          const fromShift = item.changes?.from?.shift;
+          
+          // Determine request type and action text
+          let requestType = 'Status Change';
+          let actionText = '';
+          let isLeave = false;
+          
+          if (item.is_leave === 1 || toDayType === 'leave') {
+            requestType = 'Leave';
+            actionText = item.leave_type !== 'Unknown' ? item.leave_type : 'Leave';
+            isLeave = true;
+          } else if (toDayType === 'wfh') {
+            requestType = 'WFH';
+            actionText = 'Work From Home';
+          } else if (toDayType === 'half_day') {
+            requestType = 'Half Day';
+            actionText = 'Half Day';
+          } else if (toDayType === 'weekoff') {
+            requestType = 'Week Off';
+            actionText = 'Week Off';
+          } else if (toDayType === 'working') {
+            requestType = 'Working Day';
+            actionText = 'Working Day';
+          }
+          
+          return {
+            id: item.draft_id,
+            user_name: item.user_name,
+            employee_id: item.user_id,
+            team_name: item.team?.team_name || 'No Team',
+            team_id: item.team?.team_id,
+            date: item.date,
+            leave_type: item.leave_type !== 'Unknown' ? item.leave_type : null,
+            day_type: toDayType || '-',
+            day_type_from: fromDayType,
+            day_type_to: toDayType,
+            shift: item.shift || toShift || null,
+            from_shift: fromShift,
+            to_shift: toShift,
+            request_type: requestType,
+            action: actionText || item.action || 'Status Change',
+            requested_by: item.requested_by,
+            requested_at: item.requested_at,
+            status: item.status,
+            is_planned: item.is_planned === "yes",
+            is_leave: isLeave,
+            changes: item.changes
+          };
+        });
         
         console.log('Converted requests sample:', convertedRequests[0]);
 
@@ -260,20 +299,36 @@ const ManagerRosterRequests = () => {
                         <div className="text-slate-600">
                           <strong>Requested By:</strong> {request.requested_by}
                         </div>
-                        <div className="text-slate-600">
-                          <strong>Status:</strong> {request.day_type || '-'}
-                        </div>
-                        {request.changes ? (
+                        {/* Show From → To Status Change */}
+                        {(request.day_type_from || request.day_type_to) && (
                           <div className="text-slate-600">
-                            <strong>Shift:</strong> {request.changes.from?.shift || '-'} → {request.changes.to?.shift || '-'}
+                            <strong>Status:</strong> {request.day_type_from || '-'} → {request.day_type_to || '-'}
                           </div>
-                        ) : null}
-                        <div className="text-slate-600">
-                          <strong>Leave Type:</strong> {request.leave_type || '-'}
-                        </div>
-                        <div className="text-slate-600">
-                          <strong>Planned:</strong> {request.is_planned ? 'Yes' : 'No'}
-                        </div>
+                        )}
+                        {/* Show From → To Shift Change */}
+                        {(request.from_shift || request.to_shift) && (
+                          <div className="text-slate-600">
+                            <strong>Shift:</strong> {request.from_shift || '-'} → {request.to_shift || '-'}
+                          </div>
+                        )}
+                        {/* Show Action if available and not Unknown */}
+                        {request.action && request.action !== 'Unknown' && (
+                          <div className="text-slate-600">
+                            <strong>Action:</strong> {request.action}
+                          </div>
+                        )}
+                        {/* Show Leave Type only for leave requests */}
+                        {request.is_leave && (
+                          <div className="text-slate-600">
+                            <strong>Leave Type:</strong> {request.leave_type || '-'}
+                          </div>
+                        )}
+                        {/* Show Planned only for leave requests */}
+                        {request.is_leave && (
+                          <div className="text-slate-600">
+                            <strong>Planned:</strong> {request.is_planned ? 'Yes' : 'No'}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -306,7 +361,7 @@ const ManagerRosterRequests = () => {
                   <User className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-slate-800 text-lg">{selectedRequest.employee_name}</h4>
+                  <h4 className="font-semibold text-slate-800 text-lg">{selectedRequest.user_name}</h4>
                   <p className="text-sm text-slate-500">{selectedRequest.team_name}</p>
                 </div>
               </div>
@@ -314,7 +369,7 @@ const ManagerRosterRequests = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-slate-50 p-4 rounded-lg">
                   <p className="text-sm text-slate-500 mb-1">Date</p>
-                  <p className="font-medium text-slate-800">{selectedRequest.date}</p>
+                  <p className="font-medium text-slate-800">{format(new Date(selectedRequest.date), 'dd/MM/yyyy')}</p>
                 </div>
                 <div className="bg-slate-50 p-4 rounded-lg">
                   <p className="text-sm text-slate-500 mb-1">Status</p>
@@ -323,34 +378,49 @@ const ManagerRosterRequests = () => {
                     selectedRequest.status === 'approved' ? 'bg-green-100 text-green-700' :
                     'bg-red-100 text-red-700'
                   }`}>
-                    {selectedRequest.status_display || selectedRequest.status}
+                    {selectedRequest.status ? selectedRequest.status.charAt(0).toUpperCase() + selectedRequest.status.slice(1) : ''}
                   </span>
                 </div>
                 <div className="bg-slate-50 p-4 rounded-lg">
-                  <p className="text-sm text-slate-500 mb-1">Change Type</p>
-                  <p className="font-medium text-slate-800">{selectedRequest.change_type}</p>
-                </div>
-                <div className="bg-slate-50 p-4 rounded-lg">
-                  <p className="text-sm text-slate-500 mb-1">Details</p>
-                  <p className="font-medium text-slate-800">{selectedRequest.change_details}</p>
+                  <p className="text-sm text-slate-500 mb-1">Request Type</p>
+                  <p className="font-medium text-slate-800">{selectedRequest.request_type || 'Status Change'}</p>
                 </div>
                 <div className="bg-slate-50 p-4 rounded-lg">
                   <p className="text-sm text-slate-500 mb-1">Requested By</p>
                   <p className="font-medium text-slate-800">{selectedRequest.requested_by}</p>
                 </div>
                 <div className="bg-slate-50 p-4 rounded-lg">
-                  <p className="text-sm text-slate-500 mb-1">Requested Date</p>
-                  <p className="font-medium text-slate-800">{selectedRequest.requested_date}</p>
+                  <p className="text-sm text-slate-500 mb-1">Requested At</p>
+                  <p className="font-medium text-slate-800">{format(new Date(selectedRequest.requested_at), 'dd/MM/yyyy')}</p>
                 </div>
+                {/* Show From → To Status Change */}
+                {(selectedRequest.day_type_from || selectedRequest.day_type_to) && (
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <p className="text-sm text-slate-500 mb-1">Status Change</p>
+                    <p className="font-medium text-slate-800">{selectedRequest.day_type_from || '-'} → {selectedRequest.day_type_to || '-'}</p>
+                  </div>
+                )}
+                {/* Show From → To Shift Change */}
+                {(selectedRequest.from_shift || selectedRequest.to_shift) && (
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <p className="text-sm text-slate-500 mb-1">Shift Change</p>
+                    <p className="font-medium text-slate-800">{selectedRequest.from_shift || '-'} → {selectedRequest.to_shift || '-'}</p>
+                  </div>
+                )}
               </div>
 
-              {selectedRequest.is_planned !== null && (
-                <div className="bg-slate-50 p-4 rounded-lg">
-                  <p className="text-sm text-slate-500 mb-1">Leave Type</p>
-                  <p className="font-medium text-slate-800">
-                    {selectedRequest.is_planned ? 'Planned Leave' : 'Unplanned Leave'}
-                  </p>
-                </div>
+              {/* Show Leave Type and Planned only for leave requests */}
+              {selectedRequest.is_leave && (
+                <>
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <p className="text-sm text-slate-500 mb-1">Leave Type</p>
+                    <p className="font-medium text-slate-800">{selectedRequest.leave_type || '-'}</p>
+                  </div>
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <p className="text-sm text-slate-500 mb-1">Planned</p>
+                    <p className="font-medium text-slate-800">{selectedRequest.is_planned ? 'Yes' : 'No'}</p>
+                  </div>
+                </>
               )}
             </div>
           </div>
