@@ -517,15 +517,7 @@ const AssistantManagerRoster = () => {
         return rosterEntry;
       });
       
-      console.log('[DEBUG] Converted roster data sample:', convertedData?.[0]);
-      console.log('[DEBUG] Yahya Irani monday data:', convertedData?.[0]?.monday);
-      console.log('[DEBUG] Yahya Irani tuesday data:', convertedData?.[0]?.tuesday);
-      console.log('[DEBUG] Yahya Irani wednesday data:', convertedData?.[0]?.wednesday);
-      console.log('[DEBUG] Yahya Irani thursday data:', convertedData?.[0]?.thursday);
-      console.log('[DEBUG] Yahya Irani friday data:', convertedData?.[0]?.friday);
-      console.log('[DEBUG] Yahya Irani saturday data:', convertedData?.[0]?.saturday);
-      console.log('[DEBUG] Yahya Irani sunday data:', convertedData?.[0]?.sunday);
-      
+
       setRosterData(convertedData);
       setOriginalRosterData(JSON.parse(JSON.stringify(convertedData))); // Deep copy for change tracking
       setChangedCells([]); // Reset changes when loading new data
