@@ -352,6 +352,103 @@ const ManagerQCReportsOverview = () => {
     }
   };
 
+  // Export History Data (Rework & Correction only)
+  const handleExportHistory = () => {
+    try {
+      // Collect all rework and correction history from filtered records
+      const historyData = [];
+      
+      filteredRecords.forEach(record => {
+        // Add Rework history
+        if (record.qc_rework && record.qc_rework.length > 0) {
+          record.qc_rework.forEach(rework => {
+            const { types, count } = getErrorTypes(rework.rework_error_list);
+            const evalDt = formatDate(rework.updated_at);
+            const workDt = formatDate(record.date_of_file_submission);
+            
+            historyData.push({
+              'Type': 'Rework',
+              'Evaluation Date': evalDt.date,
+              'Work Date': workDt.date,
+              'Team Lead': record.assistant_manager_name || 'N/A',
+              'Agent Name': record.agent_name || 'N/A',
+              'Project Name': record.project_name || 'N/A',
+              'Task Name': record.task_name || 'N/A',
+              'Count': rework.rework_count || '-',
+              'Records': rework.file_record_count || 0,
+              'QC Records': rework.qc_data_generated_count || 0,
+              'No. of Errors': count,
+              'Final QC Score': rework.rework_qc_score ? `${rework.rework_qc_score}%` : '-',
+              'Error Type': types.length > 0 ? types.join(', ') : '-',
+              'QA Name': record.qa_agent_name || 'N/A'
+            });
+          });
+        }
+        
+        // Add Correction history
+        if (record.qc_correction && record.qc_correction.length > 0) {
+          record.qc_correction.forEach(correction => {
+            const evalDt = formatDate(correction.updated_at);
+            const workDt = formatDate(record.date_of_file_submission);
+            
+            historyData.push({
+              'Type': 'Correction',
+              'Evaluation Date': evalDt.date,
+              'Work Date': workDt.date,
+              'Team Lead': record.assistant_manager_name || 'N/A',
+              'Agent Name': record.agent_name || 'N/A',
+              'Project Name': record.project_name || 'N/A',
+              'Task Name': record.task_name || 'N/A',
+              'Count': correction.correction_count || '-',
+              'Records': '-',
+              'QC Records': '-',
+              'No. of Errors': '-',
+              'Final QC Score': '-',
+              'Error Type': '-',
+              'QA Name': record.qa_agent_name || 'N/A'
+            });
+          });
+        }
+      });
+
+      if (historyData.length === 0) {
+        toast.error('No history data (rework/correction) to export');
+        return;
+      }
+
+      // Calculate summary
+      const totalRework = historyData.filter(h => h.Type === 'Rework').length;
+      const totalCorrection = historyData.filter(h => h.Type === 'Correction').length;
+      const totalReworkErrors = historyData
+        .filter(h => h.Type === 'Rework' && h['No. of Errors'] !== '-')
+        .reduce((sum, h) => sum + (parseInt(h['No. of Errors']) || 0), 0);
+
+      historyData.push({
+        'Type': 'SUMMARY',
+        'Evaluation Date': '',
+        'Work Date': '',
+        'Team Lead': '',
+        'Agent Name': '',
+        'Project Name': `Total Rework: ${totalRework}`,
+        'Task Name': `Total Correction: ${totalCorrection}`,
+        'Count': '',
+        'Records': '',
+        'QC Records': '',
+        'No. of Errors': totalReworkErrors,
+        'Final QC Score': '',
+        'Error Type': '',
+        'QA Name': ''
+      });
+
+      const filename = `QC_History_${new Date().toISOString().split('T')[0]}.csv`;
+      exportToCSV(historyData, filename);
+      toast.success(`Exported ${historyData.length - 1} history records!`);
+    } catch (err) {
+      console.error('History export error:', err);
+      toast.error('Failed to export history data');
+    }
+  };
+
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-6">
@@ -389,6 +486,13 @@ const ManagerQCReportsOverview = () => {
             >
               <Download className="w-4 h-4" />
               Export Excel
+            </button>
+            <button
+              onClick={handleExportHistory}
+              className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition-colors flex items-center gap-2 shadow-md"
+            >
+              <Download className="w-4 h-4" />
+              Export History
             </button>
             <button
               onClick={handleReset}
@@ -486,12 +590,13 @@ const ManagerQCReportsOverview = () => {
                   <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider">Final QC Score</th>
                   <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Error Type</th>
                   <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">QA Name</th>
+                  <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {filteredRecords.length === 0 ? (
                   <tr>
-                    <td colSpan="12" className="px-4 py-12 text-center text-slate-500">
+                    <td colSpan="13" className="px-4 py-12 text-center text-slate-500">
                       <FileCheck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                       <p className="font-bold">No QC records found</p>
                       <p className="text-sm">Try adjusting your filters</p>
@@ -499,7 +604,8 @@ const ManagerQCReportsOverview = () => {
                   </tr>
                 ) : (
                   filteredRecords.map((record, index) => (
-                    <tr key={record.id || index} className="hover:bg-slate-50 transition-colors">
+                    <React.Fragment key={record.id || index}>
+                    <tr className="hover:bg-slate-50 transition-colors">
                       {/* Evaluation Date - created_at */}
                       <td className="px-3 py-3 text-sm text-slate-700">
                         {(() => {
@@ -645,7 +751,149 @@ const ManagerQCReportsOverview = () => {
                           {record.qa_agent_name || 'N/A'}
                         </span>
                       </td>
+                      
+                      {/* Expand/Collapse Button */}
+                      <td className="px-3 py-3 text-center">
+                        {(record.qc_rework?.length > 0 || record.qc_correction?.length > 0) && (
+                          <button
+                            onClick={() => setSelectedRecord(selectedRecord?.id === record.id ? null : record)}
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-600 transition-colors"
+                            title="View History"
+                          >
+                            {selectedRecord?.id === record.id ? (
+                              <ChevronUp className="w-4 h-4" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
+                      </td>
                     </tr>
+                    
+                    {/* History Section - Rework & Correction */}
+                    {selectedRecord?.id === record.id && (record.qc_rework?.length > 0 || record.qc_correction?.length > 0) && (
+                      <tr>
+                        <td colSpan="13" className="px-0 py-0">
+                          <div className="bg-slate-50 border-t-2 border-slate-200">
+                            {/* History Header */}
+                            <div className="px-4 py-2 bg-gradient-to-r from-orange-50 to-red-50 border-b border-slate-200">
+                              <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                <Clock className="w-4 h-4 text-orange-600" />
+                                Rework & Correction History
+                                <span className="text-xs font-normal text-slate-500">
+                                  ({record.qc_rework?.length || 0} Rework, {record.qc_correction?.length || 0} Correction)
+                                </span>
+                              </h4>
+                            </div>
+                            
+                            {/* History Table */}
+                            <div className="overflow-x-auto p-4">
+                              <table className="w-full text-sm">
+                                <thead className="bg-slate-100">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase">Type</th>
+                                    <th className="px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase">Eval Date</th>
+                                    <th className="px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase">Work Date</th>
+                                    <th className="px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase">Team Lead</th>
+                                    <th className="px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase">Agent</th>
+                                    <th className="px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase">Project</th>
+                                    <th className="px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase">Task</th>
+                                    <th className="px-3 py-2 text-center text-xs font-bold text-slate-600 uppercase">Count</th>
+                                    <th className="px-3 py-2 text-center text-xs font-bold text-slate-600 uppercase">Records</th>
+                                    <th className="px-3 py-2 text-center text-xs font-bold text-slate-600 uppercase">QC Rec</th>
+                                    <th className="px-3 py-2 text-center text-xs font-bold text-slate-600 uppercase">Errors</th>
+                                    <th className="px-3 py-2 text-center text-xs font-bold text-slate-600 uppercase">Score</th>
+                                    <th className="px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase">Error Type</th>
+                                    <th className="px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase">QA</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {/* Rework History */}
+                                  {record.qc_rework?.map((rework, idx) => {
+                                    const { types, count } = getErrorTypes(rework.rework_error_list);
+                                    const evalDt = formatDate(rework.updated_at);
+                                    const workDt = formatDate(record.date_of_file_submission);
+                                    return (
+                                      <tr key={`rework-${idx}`} className="border-b border-slate-100 hover:bg-orange-50">
+                                        <td className="px-3 py-2">
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">
+                                            <AlertCircle className="w-3 h-3" />
+                                            Rework
+                                          </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-slate-700">{evalDt.date}</td>
+                                        <td className="px-3 py-2 text-slate-700">{workDt.date}</td>
+                                        <td className="px-3 py-2 text-slate-700">{record.assistant_manager_name || 'N/A'}</td>
+                                        <td className="px-3 py-2 font-medium text-slate-800">{record.agent_name || 'N/A'}</td>
+                                        <td className="px-3 py-2 text-slate-700">{record.project_name || 'N/A'}</td>
+                                        <td className="px-3 py-2 text-slate-700">{record.task_name || 'N/A'}</td>
+                                        <td className="px-3 py-2 text-center font-bold text-orange-600">{rework.rework_count || '-'}</td>
+                                        <td className="px-3 py-2 text-center">{rework.file_record_count || 0}</td>
+                                        <td className="px-3 py-2 text-center">{rework.qc_data_generated_count || 0}</td>
+                                        <td className="px-3 py-2 text-center">
+                                          <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-xs font-bold ${count > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                                            {count}
+                                          </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-center">
+                                          <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-xs font-bold ${
+                                            (rework.rework_qc_score || 0) >= 98 ? 'bg-green-100 text-green-700' :
+                                            (rework.rework_qc_score || 0) >= 90 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                                          }`}>
+                                            {rework.rework_qc_score ? `${rework.rework_qc_score}%` : '-'}
+                                          </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-xs text-slate-600">
+                                          {types.length > 0 ? (
+                                            <div className="flex flex-wrap gap-1">
+                                              {types.slice(0, 2).map((type, tidx) => (
+                                                <span key={tidx} className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-xs">{type}</span>
+                                              ))}
+                                              {types.length > 2 && <span className="text-xs text-slate-400">+{types.length - 2}</span>}
+                                            </div>
+                                          ) : '-'}
+                                        </td>
+                                        <td className="px-3 py-2 text-xs text-slate-600">{record.qa_agent_name || 'N/A'}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                  
+                                  {/* Correction History */}
+                                  {record.qc_correction?.map((correction, idx) => {
+                                    const evalDt = formatDate(correction.updated_at);
+                                    const workDt = formatDate(record.date_of_file_submission);
+                                    return (
+                                      <tr key={`correction-${idx}`} className="border-b border-slate-100 hover:bg-red-50">
+                                        <td className="px-3 py-2">
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">
+                                            <XCircle className="w-3 h-3" />
+                                            Correction
+                                          </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-slate-700">{evalDt.date}</td>
+                                        <td className="px-3 py-2 text-slate-700">{workDt.date}</td>
+                                        <td className="px-3 py-2 text-slate-700">{record.assistant_manager_name || 'N/A'}</td>
+                                        <td className="px-3 py-2 font-medium text-slate-800">{record.agent_name || 'N/A'}</td>
+                                        <td className="px-3 py-2 text-slate-700">{record.project_name || 'N/A'}</td>
+                                        <td className="px-3 py-2 text-slate-700">{record.task_name || 'N/A'}</td>
+                                        <td className="px-3 py-2 text-center font-bold text-red-600">{correction.correction_count || '-'}</td>
+                                        <td className="px-3 py-2 text-center">-</td>
+                                        <td className="px-3 py-2 text-center">-</td>
+                                        <td className="px-3 py-2 text-center">-</td>
+                                        <td className="px-3 py-2 text-center">-</td>
+                                        <td className="px-3 py-2 text-xs text-slate-600">-</td>
+                                        <td className="px-3 py-2 text-xs text-slate-600">{record.qa_agent_name || 'N/A'}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   ))
                 )}
               </tbody>
