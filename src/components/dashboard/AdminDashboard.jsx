@@ -200,7 +200,7 @@ const AdminDashboard = () => {
       {console.log('[AdminDashboard] Rendering with state:', { activeTab, loading, error, stats })}
       
       {/* Navigation Tabs */}
-      <AssistantManagerTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
+      <AssistantManagerTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} isSuperAdmin={true} />
       
       {/* Overview Tab Content */}
       {activeTab === 'overview' && (

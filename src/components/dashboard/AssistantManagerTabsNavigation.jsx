@@ -2,21 +2,24 @@ import React from 'react';
 import UserMonthlyReport from './UserMonthlyReport';
 import ProjectMonthlyReport from './ProjectMonthlyReport';
 import ManagerRosterRequests from '../../pages/ManagerRosterRequests';
+import QABillableReport from './QABillableReport';
 import {
   LayoutGrid,
   Briefcase,
   Users,
   FolderKanban,
-  FileText
+  FileText,
+  FileCheck
 } from 'lucide-react';
 
-const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab }) => {
+const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab, isSuperAdmin = false }) => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
     { id: 'billable_report', label: 'Billable Report', icon: Briefcase },
     { id: 'user_monthly_report', label: 'User Monthly Goal', icon: Users },
     { id: 'project_monthly_report', label: 'Project Monthly Report', icon: FolderKanban },
-    { id: 'roster_report', label: 'Roster Report', icon: FileText }
+    { id: 'roster_report', label: 'Roster Report', icon: FileText },
+    ...(isSuperAdmin ? [{ id: 'qa_billable_report', label: 'QA Billable Report', icon: FileCheck }] : [])
   ];
 
   return (
@@ -72,6 +75,12 @@ const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab }) => {
       {activeTab === 'roster_report' && (
         <div className="mt-6">
           <ManagerRosterRequests />
+        </div>
+      )}
+      {/* QA Billable Report Tab */}
+      {activeTab === 'qa_billable_report' && (
+        <div className="mt-6">
+          <QABillableReport />
         </div>
       )}
     </div>
