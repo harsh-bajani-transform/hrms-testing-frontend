@@ -179,6 +179,20 @@ const ManagerRosterRequests = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-8 px-4 sm:px-6 lg:px-8">
+      {/* Full Page Loader Overlay */}
+      {loading && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center">
+            <div className="relative mb-4">
+              <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200"></div>
+              <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent absolute top-0"></div>
+            </div>
+            <p className="text-slate-700 font-semibold text-lg">Loading requests...</p>
+            <p className="text-slate-500 text-sm mt-1">Please wait while we fetch the data</p>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -246,12 +260,7 @@ const ManagerRosterRequests = () => {
 
         {/* Requests List */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          {loading ? (
-            <div className="px-6 py-12 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-              <p className="text-slate-500">Loading requests...</p>
-            </div>
-          ) : filteredRequests.length === 0 ? (
+          {filteredRequests.length === 0 ? (
             <div className="px-6 py-12 text-center">
               <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
               <p className="text-slate-500 font-medium text-lg">No {filterStatus} requests found</p>
