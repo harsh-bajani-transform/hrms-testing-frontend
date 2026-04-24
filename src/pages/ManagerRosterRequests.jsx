@@ -11,6 +11,7 @@ const ManagerRosterRequests = () => {
   const [filterStatus, setFilterStatus] = useState('pending');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
+  const loadingCountRef = useRef(0);
   const [allRequests, setAllRequests] = useState({
     pending: [],
     approved: [],
@@ -23,6 +24,7 @@ const ManagerRosterRequests = () => {
   // Define fetchRequests function
   const fetchRequests = async (status, userData = null) => {
     try {
+      loadingCountRef.current += 1;
       setLoading(true);
       const userDataToUse = userData || authUser;
       const userId = userDataToUse?.user_id || userDataToUse?.id || 111;
@@ -127,7 +129,11 @@ const ManagerRosterRequests = () => {
       toast.error(error.response?.data?.message || 'Failed to load requests');
       setAllRequests(prev => ({ ...prev, [status]: [] }));
     } finally {
-      setLoading(false);
+      loadingCountRef.current -= 1;
+      if (loadingCountRef.current <= 0) {
+        setLoading(false);
+        loadingCountRef.current = 0;
+      }
     }
   };                                                   
 
