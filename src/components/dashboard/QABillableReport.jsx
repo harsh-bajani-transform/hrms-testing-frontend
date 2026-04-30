@@ -66,9 +66,32 @@ const QABillableReport = () => {
       });
 
       if (response.data?.status === 200) {
-        setData(response.data.data?.records || []);
-        setSummary(response.data.data?.summary || null);
-        toast.success(`Loaded ${response.data.data?.records?.length || 0} records`);
+        // Map API response fields to frontend expected fields
+        const mappedRecords = (response.data.data?.records || []).map(record => ({
+          ...record,
+          agent_name: record.qa_agent_name || record.agent_name,
+          qa_name: record.qa_agent_name || record.qa_name,
+          task_name: record.task_name || 'N/A',
+          qa_task_target: record.qa_task_target || '-',
+          file_record_count: record.file_record_count || record.daily_production || '-',
+          qc_generated_count: record.qc_generated_count || record.daily_qc_records || '-',
+          total_files: record.total_files || record.daily_production || '-',
+          qa_billable_hours: record.qa_billable_hours || record.daily_billable_hours || '-',
+          team_name: record.team_name || 'N/A'
+        }));
+        
+        // Map summary fields
+        const mappedSummary = response.data.data?.summary ? {
+          ...response.data.data.summary,
+          total_files_processed: response.data.data.summary.total_production || response.data.data.summary.total_files_processed || '-',
+          total_qc_records: response.data.data.summary.total_qc_records || '-',
+          total_unique_qa_agents: response.data.data.summary.total_unique_qa_agents || '-',
+          total_billable_hours: response.data.data.summary.total_billable_hours || '-'
+        } : null;
+        
+        setData(mappedRecords);
+        setSummary(mappedSummary);
+        toast.success(`Loaded ${mappedRecords.length} records`);
       } else {
         toast.error(response.data?.message || "Failed to load report data");
         setData([]);
@@ -105,16 +128,16 @@ const QABillableReport = () => {
     const searchLower = searchTerm.toLowerCase();
     return data.filter((record) => {
       return (
-        record.agent_name?.toLowerCase().includes(searchLower) ||
-        record.task_name?.toLowerCase().includes(searchLower) ||
-        record.team_name?.toLowerCase().includes(searchLower) ||
+        (record.agent_name || record.qa_agent_name)?.toLowerCase().includes(searchLower) ||
+        (record.task_name || 'N/A').toLowerCase().includes(searchLower) ||
+        (record.team_name || 'N/A').toLowerCase().includes(searchLower) ||
         record.report_date?.includes(searchLower) ||
-        String(record.qa_task_target).includes(searchLower) ||
-        String(record.file_record_count).includes(searchLower) ||
-        String(record.qc_generated_count).includes(searchLower) ||
-        String(record.total_files).includes(searchLower) ||
-        String(record.qa_billable_hours).includes(searchLower) ||
-        record.qa_name?.toLowerCase().includes(searchLower)
+        String(record.qa_task_target || '-').includes(searchLower) ||
+        String(record.file_record_count || record.daily_production || '-').includes(searchLower) ||
+        String(record.qc_generated_count || record.daily_qc_records || '-').includes(searchLower) ||
+        String(record.total_files || record.daily_production || '-').includes(searchLower) ||
+        String(record.qa_billable_hours || record.daily_billable_hours || '-').includes(searchLower) ||
+        (record.qa_name || record.qa_agent_name)?.toLowerCase().includes(searchLower)
       );
     });
   }, [data, searchTerm]);
@@ -125,7 +148,7 @@ const QABillableReport = () => {
     
     const grouped = {};
     filteredData.forEach((record) => {
-      const qaName = record.qa_name || "Unknown QA";
+      const qaName = record.qa_name || record.qa_agent_name || "Unknown QA";
       if (!grouped[qaName]) {
         grouped[qaName] = {
           qa_name: qaName,
@@ -136,9 +159,9 @@ const QABillableReport = () => {
         };
       }
       grouped[qaName].records.push(record);
-      grouped[qaName].total_billable_hours += Number(record.qa_billable_hours) || 0;
-      grouped[qaName].total_files += Number(record.total_files) || 0;
-      grouped[qaName].total_qc_records += Number(record.qc_generated_count) || 0;
+      grouped[qaName].total_billable_hours += Number(record.qa_billable_hours || record.daily_billable_hours) || 0;
+      grouped[qaName].total_files += Number(record.total_files || record.daily_production) || 0;
+      grouped[qaName].total_qc_records += Number(record.qc_generated_count || record.daily_qc_records) || 0;
     });
     return grouped;
   }, [filteredData, isQA]);
@@ -164,15 +187,15 @@ const QABillableReport = () => {
     ];
 
     const rows = records.map((record) => [
-      record.agent_name,
+      record.agent_name || record.qa_agent_name,
       record.report_date,
-      record.task_name,
-      record.qa_task_target,
-      record.file_record_count,
-      record.qc_generated_count,
-      record.total_files,
-      record.qa_billable_hours,
-      record.qa_name,
+      record.task_name || 'N/A',
+      record.qa_task_target || '-',
+      record.file_record_count || record.daily_production || '-',
+      record.qc_generated_count || record.daily_qc_records || '-',
+      record.total_files || record.daily_production || '-',
+      record.qa_billable_hours || record.daily_billable_hours || '-',
+      record.qa_name || record.qa_agent_name,
       record.team_name,
     ]);
 
@@ -295,7 +318,7 @@ const QABillableReport = () => {
         <tbody className="divide-y divide-slate-100">
           {records.map((record, index) => (
             <tr
-              key={`${record.agent_id}-${record.task_id}-${record.report_date}-${index}`}
+              key={`${record.qa_agent_id || record.agent_id}-${index}-${record.report_date}`}
               className="hover:bg-slate-50 transition-colors"
             >
               {showAgentInfo && (
@@ -306,7 +329,7 @@ const QABillableReport = () => {
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-slate-800">
-                        {record.agent_name}
+                        {record.agent_name || record.qa_agent_name}
                       </p>
                       <p className="text-xs text-slate-500">{record.team_name}</p>
                     </div>
@@ -320,34 +343,34 @@ const QABillableReport = () => {
               </td>
               <td className="px-4 py-3">
                 <span className="text-sm font-medium text-slate-700">
-                  {record.task_name}
+                  {record.task_name || 'N/A'}
                 </span>
               </td>
               <td className="px-4 py-3 text-center">
                 <span className="inline-flex items-center px-2.5 py-0.5 bg-purple-50 text-purple-700 rounded-full text-xs font-semibold">
-                  {record.qa_task_target}
+                  {record.qa_task_target || '-'}
                 </span>
               </td>
               <td className="px-4 py-3 text-center">
                 <span className="text-sm font-semibold text-slate-700">
-                  {record.file_record_count}
+                  {record.file_record_count || record.daily_production || '-'}
                 </span>
               </td>
               <td className="px-4 py-3 text-center">
                 <span className="inline-flex items-center px-2.5 py-0.5 bg-green-50 text-green-700 rounded-full text-xs font-semibold">
-                  {record.qc_generated_count}
+                  {record.qc_generated_count || record.daily_qc_records || '-'}
                 </span>
               </td>
               <td className="px-4 py-3 text-center">
                 <span className="text-sm font-semibold text-slate-700">
-                  {record.total_files}
+                  {record.total_files || record.daily_production || '-'}
                 </span>
               </td>
               <td className="px-4 py-3 text-center">
                 <div className="flex items-center justify-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-orange-500" />
                   <span className="text-sm font-bold text-orange-600">
-                    {record.qa_billable_hours}
+                    {record.qa_billable_hours || record.daily_billable_hours || '-'}
                   </span>
                 </div>
               </td>
@@ -626,7 +649,7 @@ const QABillableReport = () => {
           />
           <StatCard
             title="Total Files Processed"
-            value={summary.total_files_processed}
+            value={summary.total_files_processed || summary.total_production || '-'}
             icon={FileText}
             color="green"
           />
@@ -662,7 +685,7 @@ const QABillableReport = () => {
             <div className="text-center">
               <p className="text-xs text-slate-500 uppercase">Total Files</p>
               <p className="text-xl font-bold text-blue-600">
-                {summary.total_files_processed}
+                {summary.total_files_processed || summary.total_production || '-'}
               </p>
             </div>
             <div className="text-center">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { ChevronLeft, ChevronRight, Search, CheckCircle, XCircle, Eye, Calendar, User, Clock, FileText } from 'lucide-react';
 import api from '../services/api';
@@ -21,8 +21,8 @@ const ManagerRosterRequests = () => {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
 
-  // Define fetchRequests function
-  const fetchRequests = async (status, userData = null) => {
+  // Define fetchRequests function with useCallback for stable reference
+  const fetchRequests = useCallback(async (status, userData = null) => {
     try {
       loadingCountRef.current += 1;
       setLoading(true);
@@ -135,7 +135,7 @@ const ManagerRosterRequests = () => {
         loadingCountRef.current = 0;
       }
     }
-  };                                                   
+  }, [authUser, selectedMonth]); // Dependencies for fetchRequests                                                   
 
   // Debug: Track allRequests changes
   useEffect(() => {
@@ -154,7 +154,26 @@ const ManagerRosterRequests = () => {
       fetchRequests('approved', authUser);
       fetchRequests('rejected', authUser);
     }
-  }, [authUser]);
+  }, [authUser, fetchRequests]);
+
+  // Re-fetch when month changes
+  useEffect(() => {
+    if (authUser) {
+      console.log('Month changed, re-fetching...');
+      // Reset hasFetchedRef to allow re-fetching
+      hasFetchedRef.current = true;
+      // Clear current data
+      setAllRequests({
+        pending: [],
+        approved: [],
+        rejected: []
+      });
+      // Fetch all statuses for new month
+      fetchRequests('pending', authUser);
+      fetchRequests('approved', authUser);
+      fetchRequests('rejected', authUser);
+    }
+  }, [selectedMonth, authUser, fetchRequests]);
 
   const handleTabChange = (status) => {
     setFilterStatus(status);
@@ -347,7 +366,7 @@ const ManagerRosterRequests = () => {
                       </div>
                     </div>
 
-                                      </div>
+                  </div>
                 </div>
               ))}
             </div>
