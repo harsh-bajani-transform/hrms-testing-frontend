@@ -399,7 +399,7 @@ const UserRosterReport = () => {
               </div>
               <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
                 <span className="text-sm font-bold text-white">
-                  {userProfile.name.charAt(0)}
+                  {userProfile.name?.charAt(0) || 'U'}
                 </span>
               </div>
             </div>

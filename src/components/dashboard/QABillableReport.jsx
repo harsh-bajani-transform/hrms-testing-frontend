@@ -87,7 +87,7 @@ const QABillableReport = () => {
           total_qc_records: response.data.data.summary.total_qc_records || '-',
           total_unique_qa_agents: response.data.data.summary.total_unique_qa_agents || '-',
           total_billable_hours: response.data.data.summary.total_billable_hours || '-'
-        } : null;
+        } : null; 
         
         setData(mappedRecords);
         setSummary(mappedSummary);
@@ -101,7 +101,7 @@ const QABillableReport = () => {
       console.error("Error fetching billable report:", error);
       toast.error(error.response?.data?.message || "Failed to load report data");
       setData([]);
-      setSummary(null);
+      setSummary(null); 
     } finally {
       setLoading(false);
     }
